@@ -59,7 +59,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col bg-white font-sans">
       {/* Page Title */}
       <div className="p-6">
-        <h1 className="text-white text-xl font-normal">Authentication Page</h1>
+        <Link to="/" className="text-gray-900 text-xl font-normal hover:text-gray-600 transition-colors">
+          InterviewAi
+        </Link>
       </div>
 
       {/* Main Content Container */}
