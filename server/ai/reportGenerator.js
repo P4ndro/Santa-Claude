@@ -1,3 +1,4 @@
+// server/ai/reportGenerator.js
 import "dotenv/config";
 import Groq from "groq-sdk";
 

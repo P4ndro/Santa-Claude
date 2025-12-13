@@ -563,11 +563,11 @@ export default function InterviewPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900">
+      <div className="min-h-screen bg-white">
         <Navbar />
         <main className="max-w-7xl mx-auto px-6 py-8">
-          <div className="bg-slate-800 rounded-lg shadow-xl p-8 border border-slate-700 text-center">
-            <p className="text-slate-400">Loading interview...</p>
+          <div className="bg-black rounded-lg shadow-xl p-8 border border-white text-center">
+            <p className="text-white">Loading interview...</p>
           </div>
         </main>
       </div>
@@ -581,9 +581,15 @@ export default function InterviewPage() {
       <main className="max-w-7xl mx-auto px-6 py-8">
           <div className="bg-slate-800 rounded-lg shadow-xl p-8 border border-slate-700 text-center">
             <p className="text-red-400 mb-4">{error}</p>
+    return (
+      <div className="min-h-screen bg-white">
+        <Navbar />
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <div className="bg-black rounded-lg shadow-xl p-8 border border-white text-center">
+            <p className="text-white mb-4">{error}</p>
             <button
               onClick={() => navigate('/home')}
-              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors"
+              className="px-6 py-2 bg-white hover:bg-gray-200 text-black font-medium rounded-lg transition-colors"
             >
               Back to Home
             </button>
@@ -594,7 +600,7 @@ export default function InterviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className="min-h-screen bg-white">
       <Navbar />
       <main className="max-w-7xl mx-auto px-6 py-8">
           <div className="grid lg:grid-cols-2 gap-6">
@@ -696,18 +702,53 @@ export default function InterviewPage() {
             <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
+          {/* Webcam Video Panel */}
+          <div className="bg-black rounded-lg shadow-xl p-6 border border-white">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-white">Video Feed</h2>
+              <button
+                onClick={toggleVideo}
+                className="px-3 py-1 text-sm bg-white hover:bg-gray-200 text-black rounded-md transition-colors"
+              >
+                {videoEnabled ? 'Disable Video' : 'Enable Video'}
+              </button>
+            </div>
+            <div className="bg-white rounded-lg overflow-hidden aspect-video border border-white">
+              {videoEnabled ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-black">
+                  Video Disabled
+                </div>
+              )}
+            </div>
+            <div className="mt-4 p-3 bg-white rounded-md border border-white">
+              <p className="text-sm text-black">
+                🔊 Audio: <span className="text-black">Active</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Question & Answer Panel */}
+          <div className="bg-black rounded-lg shadow-xl p-6 border border-white">
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl font-semibold text-white">
                   Question {questionIndex + 1}/{questions.length}
                 </h2>
-                <span className={`text-xs px-2 py-1 rounded ${
-                  currentQuestion?.type === 'technical' 
-                    ? 'bg-blue-900/50 text-blue-400' 
-                    : 'bg-emerald-900/50 text-emerald-400'
-                }`}>
+                <span className="text-xs px-2 py-1 rounded bg-white text-black">
                   {currentQuestion?.type || 'behavioral'}
                 </span>
                 </div>
                 <div className="bg-slate-900 rounded-md p-4 border border-slate-700 mb-4">
+              </div>
+              <div className="bg-black rounded-md p-4 border border-white mb-4">
                 <p className="text-white text-lg">{currentQuestion?.text}</p>
               </div>
               </div>
@@ -819,6 +860,21 @@ export default function InterviewPage() {
                 >
                   Dismiss
                 </button>
+            <div className="mb-4">
+              <label className="block text-sm text-white mb-2">Your Answer</label>
+              <textarea
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                rows={8}
+                disabled={submitting}
+                className="w-full px-4 py-3 bg-black border border-white rounded-md text-white placeholder-gray-300 focus:outline-none focus:border-white focus:ring-1 focus:ring-white resize-none disabled:opacity-50"
+                placeholder="Type your answer here..."
+              />
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-black border border-white rounded-md">
+                <p className="text-white text-sm">{error}</p>
               </div>
             )}
 
@@ -828,6 +884,8 @@ export default function InterviewPage() {
                 disabled={!answer.trim() || submitting}
                   className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
                 >
+                className="flex-1 px-4 py-2 bg-white hover:bg-gray-200 disabled:bg-gray-400 disabled:cursor-not-allowed text-black font-medium rounded-md transition-colors"
+              >
                 {submitting ? 'Submitting...' : 'Submit Answer'}
                 </button>
                 <button
@@ -837,6 +895,10 @@ export default function InterviewPage() {
                 >
                   Skip
                 </button>
+                className="px-4 py-2 border border-white hover:border-gray-300 text-white hover:text-gray-300 font-medium rounded-md transition-colors disabled:opacity-50"
+              >
+                Skip
+              </button>
             </div>
 
             {/* Navigation buttons */}
@@ -844,7 +906,7 @@ export default function InterviewPage() {
               <button
                 onClick={handlePrevQuestion}
                 disabled={questionIndex === 0 || submitting}
-                className="flex-1 px-4 py-2 border border-slate-600 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 hover:text-white font-medium rounded-md transition-colors"
+                className="flex-1 px-4 py-2 border border-white hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-white hover:text-gray-300 font-medium rounded-md transition-colors"
               >
                 ← Previous
               </button>
@@ -853,6 +915,8 @@ export default function InterviewPage() {
                 disabled={questionIndex >= questions.length - 1 || submitting}
                 className="flex-1 px-4 py-2 border border-slate-600 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 hover:text-white font-medium rounded-md transition-colors"
                 >
+                className="flex-1 px-4 py-2 border border-white hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-white hover:text-gray-300 font-medium rounded-md transition-colors"
+              >
                 Next →
                 </button>
               </div>
@@ -862,6 +926,8 @@ export default function InterviewPage() {
               disabled={submitting}
               className="w-full mt-4 px-4 py-2 border border-red-600 hover:border-red-500 text-red-400 hover:text-red-300 font-medium rounded-md transition-colors disabled:opacity-50"
               >
+              className="w-full mt-4 px-4 py-2 border border-white hover:border-gray-300 text-white hover:text-gray-300 font-medium rounded-md transition-colors disabled:opacity-50"
+            >
               {submitting ? 'Finishing...' : 'End Interview'}
               </button>
             </div>

@@ -22,7 +22,13 @@ function mapQuestionsToInterviewFormat(questions) {
 }
 
 // Generate report with WEIGHTED scoring based on question types
+/**
+ * FALLBACK FUNCTION: This is a simple mock report generator used only when AI fails.
+ * It scores based on word count only - NOT real evaluation.
+ * If you see scores from this function, it means AI report generation failed.
+ */
 function generateMockReport(interview) {
+  console.warn('[Interviews] Using generateMockReport - AI evaluation not available');
   const answers = interview.answers || [];
   const questions = interview.questions || [];
   
@@ -66,9 +72,17 @@ function generateMockReport(interview) {
       issue = 'Question was skipped';
       severity = isTechnical ? 'high' : 'medium';
     } else {
-      const wordCount = answer.transcript.split(/\s+/).filter(w => w).length;
+      // Calculate word count more robustly
+      const transcript = (answer.transcript || '').trim();
+      const wordCount = transcript.length > 0 
+        ? transcript.split(/\s+/).filter(w => w.trim().length > 0).length 
+        : 0;
       
-      if (wordCount < 10) {
+      if (wordCount === 0) {
+        questionScore = 0;
+        issue = 'Empty answer provided';
+        severity = isTechnical ? 'high' : 'medium';
+      } else if (wordCount < 10) {
         questionScore = 20;
         issue = 'Answer too brief - lacks substance';
         severity = isTechnical ? 'high' : 'medium';
@@ -123,9 +137,12 @@ function generateMockReport(interview) {
   // Calculate metrics
   const questionsAnswered = answers.filter(a => !a.skipped && a.transcript.trim()).length;
   const questionsSkipped = answers.filter(a => a.skipped).length;
-  const answeredTranscripts = answers.filter(a => !a.skipped && a.transcript.trim());
+  const answeredTranscripts = answers.filter(a => !a.skipped && a.transcript && a.transcript.trim());
   const totalWords = answeredTranscripts.reduce((sum, a) => {
-    return sum + a.transcript.split(/\s+/).filter(w => w).length;
+    const transcript = (a.transcript || '').trim();
+    return sum + (transcript.length > 0 
+      ? transcript.split(/\s+/).filter(w => w.trim().length > 0).length 
+      : 0);
   }, 0);
   const averageAnswerLength = answeredTranscripts.length > 0 
     ? Math.round(totalWords / answeredTranscripts.length) 
@@ -198,20 +215,17 @@ function generateMockReport(interview) {
     readinessBand = 'Needs Work';
   }
 
-  // Generate summary based on scores
+  // Generate summary based on scores - NOTE: This is a FALLBACK report, not real AI evaluation
   let summary = '';
+  const fallbackWarning = '⚠️ FALLBACK REPORT: AI evaluation unavailable. Scores based on word count only. Enable AI for accurate evaluation.';
   if (technicalPercent !== null && behavioralPercent !== null) {
-    if (overallScore >= 85) {
-      summary = `Excellent performance across both technical (${technicalPercent}%) and behavioral (${behavioralPercent}%) questions. Strong candidate ready for interviews.`;
-    } else if (overallScore >= 70) {
-      summary = `Good overall performance (${overallScore}%). Technical score: ${technicalPercent}%, Behavioral score: ${behavioralPercent}%. Almost ready with some areas to improve.`;
-    } else if (overallScore >= 50) {
-      summary = `Moderate performance (${overallScore}%). Technical: ${technicalPercent}%, Behavioral: ${behavioralPercent}%. Needs more practice before interviews.`;
-    } else {
-      summary = `Performance needs improvement (${overallScore}%). Focus on both technical depth and behavioral storytelling.`;
-    }
+    summary = `${fallbackWarning} Technical: ${technicalPercent}%, Behavioral: ${behavioralPercent}%, Overall: ${overallScore}%.`;
+  } else if (technicalPercent !== null) {
+    summary = `${fallbackWarning} Technical: ${technicalPercent}%, Overall: ${overallScore}%.`;
+  } else if (behavioralPercent !== null) {
+    summary = `${fallbackWarning} Behavioral: ${behavioralPercent}%, Overall: ${overallScore}%.`;
   } else {
-    summary = `Overall score: ${overallScore}%. ${readinessBand}. Continue practicing to improve.`;
+    summary = `${fallbackWarning} Overall: ${overallScore}%.`;
   }
 
   return {
@@ -230,7 +244,7 @@ function generateMockReport(interview) {
       totalQuestions: questions.length,
     },
     // Mock report metadata (to match AI-generated report structure)
-    summary,
+    summary: summary || `⚠️ FALLBACK REPORT: AI evaluation unavailable. Scores based on word count only (${overallScore}% overall). Enable AI for accurate evaluation.`,
     aiConfidence: 0.5, // Lower confidence for mock reports
     generatedAt: new Date(),
     model: 'mock', // Indicates this is a mock report, not AI-generated
@@ -322,8 +336,6 @@ router.post('/apply/:jobId', requireAuth, async (req, res, next) => {
         id: q.id,
         text: q.text,
         type: q.type,
-        category: q.category,
-        difficulty: q.difficulty,
         weight: q.weight,
       }));
     } else {
@@ -368,7 +380,7 @@ router.post('/apply/:jobId', requireAuth, async (req, res, next) => {
       companyId: job.companyId,
       interviewType: 'application',
       status: 'in_progress',
-      questions: questions,
+      questions: questions, // Now uses AI-generated questions
       answers: [],
       currentQuestionIndex: 0,
     });
@@ -377,7 +389,6 @@ router.post('/apply/:jobId', requireAuth, async (req, res, next) => {
 
     res.status(201).json({
       interviewId: interview._id,
-      jobTitle: job.title,
       questions: interview.questions,
       currentQuestionIndex: 0,
       totalQuestions: interview.questions.length,
@@ -461,7 +472,7 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
           answerToUpdate.aiEvaluation = {
             ...evaluation,
             evaluatedAt: existingEval?.evaluatedAt || new Date(),
-            model: 'groq',
+            model: process.env.LLM_PROVIDER || 'groq',
           };
         }
       } catch (error) {
@@ -586,15 +597,24 @@ router.post('/:id/complete', requireAuth, async (req, res, next) => {
       );
       
       // Generate comprehensive report
+      console.log('[Interviews] Generating AI report with', evaluations.length, 'evaluations');
       interview.report = await generateReport(interview, evaluations, job);
-      console.log('[Interviews] AI report generated via /complete endpoint');
+      console.log('[Interviews] AI report generated successfully:', {
+        overallScore: interview.report.overallScore,
+        technicalScore: interview.report.technicalScore,
+        behavioralScore: interview.report.behavioralScore,
+      });
+      interview.status = 'completed';
+      interview.completedAt = new Date();
     } catch (error) {
       console.error('[Interviews] Error generating report:', error.message);
+      console.error('[Interviews] Full error stack:', error.stack);
       // Fallback to mock report if AI fails
+      console.warn('[Interviews] Falling back to mock report');
       interview.report = generateMockReport(interview);
+      interview.status = 'completed';
+      interview.completedAt = new Date();
     }
-    interview.status = 'completed';
-    interview.completedAt = new Date();
 
     await interview.save();
 
@@ -622,31 +642,59 @@ router.get('/:id/report', requireAuth, async (req, res, next) => {
       return res.status(404).json({ error: 'Interview not found' });
     }
 
-    // If not completed, generate report on-the-fly but don't save
+    // If not completed or report missing, try to generate with AI
     let report = interview.report;
     if (!report || !report.overallScore) {
-      try {
-        // Try to generate AI report on-the-fly
-        const job = interview.jobId ? await Job.findById(interview.jobId) : null;
-        const questionAnswerPairs = interview.questions.map(q => {
-          const answer = interview.answers.find(a => a.questionId === q.id);
-          return {
-            question: q,
-            answer: answer?.transcript || '',
-            skipped: answer?.skipped || false,
+      if (interview.status === 'completed') {
+        // Interview is completed but report is missing - try to regenerate
+        try {
+          const job = interview.jobId ? await Job.findById(interview.jobId) : null;
+          
+          // Prepare question-answer pairs for evaluation
+          const questionAnswerPairs = interview.questions.map(q => {
+            const answer = interview.answers.find(a => a.questionId === q.id);
+            return {
+              question: q,
+              answer: answer?.transcript || '',
+              skipped: answer?.skipped || false,
+              existingEvaluation: answer?.aiEvaluation || null,
+            };
+          });
+          
+          // Evaluate all answers if not already evaluated
+          const evaluations = await evaluateAnswers(
+            questionAnswerPairs.filter(pair => !pair.skipped && pair.answer).map(pair => ({
+              question: pair.question,
+              answer: pair.answer,
+            })),
+            job
+          );
+          
+          // Generate comprehensive report
+          console.log('[Interviews] Regenerating AI report on fetch with', evaluations.length, 'evaluations');
+          report = await generateReport(interview, evaluations, job);
+          console.log('[Interviews] AI report regenerated successfully:', {
+            overallScore: report.overallScore,
+            technicalScore: report.technicalScore,
+            behavioralScore: report.behavioralScore,
+          });
+          
+          // Save the generated report
+          interview.report = {
+            ...report,
+            generatedAt: new Date(),
+            model: process.env.LLM_PROVIDER || 'groq',
           };
-        });
-        const evaluations = await evaluateAnswers(
-          questionAnswerPairs.filter(pair => !pair.skipped && pair.answer).map(pair => ({
-            question: pair.question,
-            answer: pair.answer,
-          })),
-          job
-        );
-        report = await generateReport(interview, evaluations, job);
-      } catch (error) {
-        console.error('[Interviews] Error generating on-the-fly report:', error.message);
-        // Fallback to mock report
+          await interview.save();
+        } catch (error) {
+          console.error('[Interviews] Error generating report on fetch:', error.message);
+          console.error('[Interviews] Full error stack:', error.stack);
+          // Only fallback to mock if AI completely fails
+          console.warn('[Interviews] Falling back to mock report on fetch');
+          report = generateMockReport(interview);
+        }
+      } else {
+        // Interview not completed yet - use mock for preview
         report = generateMockReport(interview);
       }
     }

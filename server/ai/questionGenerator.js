@@ -1,6 +1,16 @@
 import 'dotenv/config';
 import Groq from 'groq-sdk';
 
+/**
+ * AI Question Generator Service
+ * 
+ * Generates interview questions based on job description and requirements.
+ * 
+ * Usage:
+ *   import { generateQuestions } from './ai/questionGenerator.js';
+ *   const questions = await generateQuestions(job, config);
+ */
+
 const USE_MOCK_AI = process.env.USE_MOCK_AI === 'true';
 
 let groq = null;
@@ -21,7 +31,7 @@ async function askGroq(prompt, options = {}) {
     temperature: options.temperature || 0.7,
     max_tokens: options.maxTokens || 2048,
   });
-
+  
   return response.choices[0].message.content;
 }
 
@@ -76,12 +86,13 @@ Ensure:
 
   if (USE_MOCK_AI) {
     console.log('[QuestionGenerator] Using mock mode - returning basic questions');
+    // Return basic mock questions structure
     const mockQuestions = [];
     for (let i = 0; i < numQuestions; i++) {
       const isTechnical = i < numTechnical;
       mockQuestions.push({
         id: `q${i + 1}`,
-        text: isTechnical
+        text: isTechnical 
           ? `Technical question ${i + 1} for ${job.level} ${job.title}`
           : `Behavioral question ${i + 1} for ${job.level} ${job.title}`,
         type: isTechnical ? 'technical' : 'behavioral',
@@ -122,12 +133,13 @@ Ensure:
     }));
   } catch (error) {
     console.error('[QuestionGenerator] Error generating questions:', error.message);
+    // Fallback to basic mock questions on error
     const fallbackQuestions = [];
     for (let i = 0; i < numQuestions; i++) {
       const isTechnical = i < numTechnical;
       fallbackQuestions.push({
         id: `q${i + 1}`,
-        text: isTechnical
+        text: isTechnical 
           ? `Technical question ${i + 1} for ${job.level} ${job.title}`
           : `Behavioral question ${i + 1} for ${job.level} ${job.title}`,
         type: isTechnical ? 'technical' : 'behavioral',
@@ -161,12 +173,13 @@ Return ONLY a valid JSON array in this exact format:
 
   if (USE_MOCK_AI) {
     console.log('[QuestionGenerator] Using mock mode for practice questions');
+    // Return basic mock practice questions
     const mockQuestions = [];
     for (let i = 0; i < numQuestions; i++) {
-      const isTechnical = i % 2 === 0;
+      const isTechnical = i % 2 === 0; // Alternate between technical and behavioral
       mockQuestions.push({
         id: `q${i + 1}`,
-        text: isTechnical
+        text: isTechnical 
           ? `Practice technical question ${i + 1} for ${level} level`
           : `Practice behavioral question ${i + 1} for ${level} level`,
         type: isTechnical ? 'technical' : 'behavioral',
@@ -207,12 +220,13 @@ Return ONLY a valid JSON array in this exact format:
     }));
   } catch (error) {
     console.error('[QuestionGenerator] Error generating practice questions:', error.message);
+    // Fallback to basic mock questions on error
     const fallbackQuestions = [];
     for (let i = 0; i < numQuestions; i++) {
       const isTechnical = i % 2 === 0;
       fallbackQuestions.push({
         id: `q${i + 1}`,
-        text: isTechnical
+        text: isTechnical 
           ? `Practice technical question ${i + 1} for ${level} level`
           : `Practice behavioral question ${i + 1} for ${level} level`,
         type: isTechnical ? 'technical' : 'behavioral',
