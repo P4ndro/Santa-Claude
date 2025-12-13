@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { Interview } from '../models/Interview.js';
+import { Job } from '../models/Job.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -193,10 +194,37 @@ function generateMockReport(interview) {
     recommendations.push('Keep practicing regularly to stay interview-ready');
   }
 
+  // Determine readiness band
+  let readinessBand = 'Not Ready';
+  if (overallScore >= 85) {
+    readinessBand = 'Ready';
+  } else if (overallScore >= 70) {
+    readinessBand = 'Almost Ready';
+  } else if (overallScore >= 50) {
+    readinessBand = 'Needs Work';
+  }
+
+  // Generate summary based on scores
+  let summary = '';
+  if (technicalPercent !== null && behavioralPercent !== null) {
+    if (overallScore >= 85) {
+      summary = `Excellent performance across both technical (${technicalPercent}%) and behavioral (${behavioralPercent}%) questions. Strong candidate ready for interviews.`;
+    } else if (overallScore >= 70) {
+      summary = `Good overall performance (${overallScore}%). Technical score: ${technicalPercent}%, Behavioral score: ${behavioralPercent}%. Almost ready with some areas to improve.`;
+    } else if (overallScore >= 50) {
+      summary = `Moderate performance (${overallScore}%). Technical: ${technicalPercent}%, Behavioral: ${behavioralPercent}%. Needs more practice before interviews.`;
+    } else {
+      summary = `Performance needs improvement (${overallScore}%). Focus on both technical depth and behavioral storytelling.`;
+    }
+  } else {
+    summary = `Overall score: ${overallScore}%. ${readinessBand}. Continue practicing to improve.`;
+  }
+
   return {
     overallScore,
     technicalScore: technicalPercent,
     behavioralScore: behavioralPercent,
+    readinessBand,
     primaryBlockers,
     strengths,
     areasForImprovement,
@@ -207,16 +235,30 @@ function generateMockReport(interview) {
       questionsSkipped,
       totalQuestions: questions.length,
     },
+    // Mock report metadata (to match AI-generated report structure)
+    summary,
+    aiConfidence: 0.5, // Lower confidence for mock reports
+    generatedAt: new Date(),
+    model: 'mock', // Indicates this is a mock report, not AI-generated
   };
 }
 
-// POST /api/interviews/start - Start a new interview
+// POST /api/interviews/start - Start a practice interview (no job)
 router.post('/start', requireAuth, async (req, res, next) => {
   try {
+    if (req.user.role === 'company') {
+      return res.status(403).json({ error: 'Companies cannot start practice interviews' });
+    }
+
+    // TODO: AI Integration - Generate practice questions with AI
+    // import { generatePracticeQuestions } from '../ai/questionGenerator.js';
+    // const questions = await generatePracticeQuestions({ level: 'Mid', numQuestions: 5 });
+    
     const interview = new Interview({
       userId: req.user._id,
+      interviewType: 'practice',
       status: 'in_progress',
-      questions: MOCK_QUESTIONS,
+      questions: MOCK_QUESTIONS, // Will be replaced with AI-generated questions
       answers: [],
       currentQuestionIndex: 0,
     });
@@ -225,6 +267,81 @@ router.post('/start', requireAuth, async (req, res, next) => {
 
     res.status(201).json({
       interviewId: interview._id,
+      questions: interview.questions,
+      currentQuestionIndex: 0,
+      totalQuestions: interview.questions.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/interviews/apply/:jobId - Apply to a job (creates interview linked to job)
+router.post('/apply/:jobId', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role === 'company') {
+      return res.status(403).json({ error: 'Companies cannot apply to jobs' });
+    }
+
+    const job = await Job.findById(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (job.status !== 'active') {
+      return res.status(400).json({ error: 'Job is not accepting applications' });
+    }
+
+    // Check if user already applied to this job
+    const existingInterview = await Interview.findOne({
+      userId: req.user._id,
+      jobId: job._id,
+      status: { $in: ['in_progress', 'completed'] },
+    });
+
+    if (existingInterview) {
+      return res.status(400).json({ 
+        error: 'You have already applied to this job',
+        existingInterviewId: existingInterview._id,
+      });
+    }
+
+    // Get questions from job (AI-generated) or use mock questions
+    let questions = MOCK_QUESTIONS;
+    if (job.generatedQuestions && job.generatedQuestions.length > 0) {
+      questions = job.generatedQuestions.map(q => ({
+        id: q.id,
+        text: q.text,
+        type: q.type,
+        category: q.category,
+        difficulty: q.difficulty,
+        weight: q.weight,
+      }));
+    }
+    // TODO: If no questions in job, generate them here using AI
+    // import { generateQuestions } from '../ai/questionGenerator.js';
+    // if (!job.generatedQuestions || job.generatedQuestions.length === 0) {
+    //   questions = await generateQuestions(job, job.questionConfig);
+    //   job.generatedQuestions = questions;
+    //   await job.save();
+    // }
+
+    const interview = new Interview({
+      userId: req.user._id,
+      jobId: job._id,
+      companyId: job.companyId,
+      interviewType: 'application',
+      status: 'in_progress',
+      questions: questions,
+      answers: [],
+      currentQuestionIndex: 0,
+    });
+
+    await interview.save();
+
+    res.status(201).json({
+      interviewId: interview._id,
+      jobTitle: job.title,
       questions: interview.questions,
       currentQuestionIndex: 0,
       totalQuestions: interview.questions.length,
@@ -258,6 +375,12 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
       a => a.questionId === questionId
     );
 
+    // Preserve existing aiEvaluation if answer is being updated
+    const existingAnswer = existingAnswerIndex >= 0 
+      ? interview.answers[existingAnswerIndex] 
+      : null;
+    const existingEvaluation = existingAnswer?.aiEvaluation;
+
     const answerData = {
       questionId,
       transcript: transcript || '',
@@ -265,8 +388,13 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
       submittedAt: new Date(),
     };
 
+    // Only preserve existing AI evaluation if it exists (will be updated if re-evaluating)
+    if (existingEvaluation) {
+      answerData.aiEvaluation = existingEvaluation;
+    }
+
     if (existingAnswerIndex >= 0) {
-      // Update existing answer
+      // Update existing answer - preserve aiEvaluation unless re-evaluating
       interview.answers[existingAnswerIndex] = answerData;
     } else {
       // Add new answer
@@ -282,6 +410,23 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
       );
     }
 
+    // TODO: AI Integration - Evaluate answer with AI
+    // import { evaluateAnswer } from '../ai/answerEvaluator.js';
+    // if (!skipped && transcript) {
+    //   const question = interview.questions.find(q => q.id === questionId);
+    //   const job = interview.jobId ? await Job.findById(interview.jobId) : null;
+    //   const evaluation = await evaluateAnswer(question, transcript, job);
+    //   // Update the answer in the array (not just answerData)
+    //   const answerToUpdate = interview.answers.find(a => a.questionId === questionId);
+    //   if (answerToUpdate) {
+    //     answerToUpdate.aiEvaluation = {
+    //       ...evaluation,
+    //       evaluatedAt: new Date(),
+    //       model: process.env.LLM_PROVIDER,
+    //     };
+    //   }
+    // }
+
     // Check if all questions answered
     const allAnswered = interview.questions.every(q =>
       interview.answers.some(a => a.questionId === q.id)
@@ -290,6 +435,12 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
     // Auto-complete if all questions answered
     let completed = false;
     if (allAnswered && interview.status !== 'completed') {
+      // TODO: AI Integration - Generate report with AI
+      // import { generateReport } from '../ai/reportGenerator.js';
+      // import { evaluateAnswers } from '../ai/answerEvaluator.js';
+      // const job = interview.jobId ? await Job.findById(interview.jobId) : null;
+      // const evaluations = await evaluateAnswers(/* ... */);
+      // interview.report = await generateReport(interview, evaluations, job);
       interview.report = generateMockReport(interview);
       interview.status = 'completed';
       interview.completedAt = new Date();
@@ -329,7 +480,30 @@ router.post('/:id/complete', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Interview already completed' });
     }
 
-    // Generate mock report
+    // TODO: AI Integration - Generate report with AI
+    // import { generateReport } from '../ai/reportGenerator.js';
+    // import { evaluateAnswers } from '../ai/answerEvaluator.js';
+    // const job = interview.jobId ? await Job.findById(interview.jobId) : null;
+    // 
+    // // Get or create evaluations for all answers
+    // const questionAnswerPairs = interview.answers
+    //   .filter(a => !a.skipped && a.transcript)
+    //   .map(a => ({
+    //     question: interview.questions.find(q => q.id === a.questionId),
+    //     answer: a.transcript,
+    //   }))
+    //   .filter(pair => pair.question);
+    // 
+    // const evaluations = await evaluateAnswers(questionAnswerPairs, job);
+    // const report = await generateReport(interview, evaluations, job);
+    // 
+    // interview.report = {
+    //   ...report,
+    //   generatedAt: new Date(),
+    //   model: process.env.LLM_PROVIDER,
+    // };
+    
+    // Fallback to mock report if AI fails
     interview.report = generateMockReport(interview);
     interview.status = 'completed';
     interview.completedAt = new Date();

@@ -44,12 +44,12 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    if (role === 'company' && !companyName) {
-      return res.status(400).json({ error: 'Company name is required for company accounts' });
+    if (role && !['candidate', 'company'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
     }
 
-    if (role && !['candidate', 'company'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role. Must be "candidate" or "company"' });
+    if (role === 'company' && !companyName) {
+      return res.status(400).json({ error: 'Company name is required for company registration' });
     }
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -57,13 +57,17 @@ router.post('/register', async (req, res, next) => {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
-    const user = new User({
+    const userData = {
       email: email.toLowerCase(),
       passwordHash: password, // Will be hashed by pre-save hook
       role: role,
-      companyName: companyName || undefined,
-    });
+    };
 
+    if (role === 'company') {
+      userData.companyName = companyName;
+    }
+
+    const user = new User(userData);
     await user.save();
 
     const { accessToken, refreshToken } = generateTokens(user._id);
@@ -71,7 +75,12 @@ router.post('/register', async (req, res, next) => {
 
     res.status(201).json({
       accessToken,
-      user: { id: user._id, email: user.email, role: user.role, companyName: user.companyName },
+      user: { 
+        id: user._id, 
+        email: user.email, 
+        role: user.role,
+        companyName: user.companyName || null,
+      },
     });
   } catch (error) {
     next(error);
@@ -102,7 +111,12 @@ router.post('/login', async (req, res, next) => {
 
     res.json({
       accessToken,
-      user: { id: user._id, email: user.email, role: user.role, companyName: user.companyName },
+      user: { 
+        id: user._id, 
+        email: user.email,
+        role: user.role,
+        companyName: user.companyName || null,
+      },
     });
   } catch (error) {
     next(error);
@@ -140,7 +154,12 @@ router.post('/refresh', async (req, res, next) => {
 
     res.json({
       accessToken: tokens.accessToken,
-      user: { id: user._id, email: user.email },
+      user: { 
+        id: user._id, 
+        email: user.email,
+        role: user.role,
+        companyName: user.companyName || null,
+      },
     });
   } catch (error) {
     res.clearCookie('refreshToken');
@@ -152,22 +171,15 @@ router.post('/refresh', async (req, res, next) => {
 });
 
 // GET /api/auth/me
-router.get('/me', requireAuth, async (req, res, next) => {
-  try {
-    // Fetch fresh user data from database
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    res.json({
-      id: user._id,
-      email: user.email,
-      role: user.role,
-      companyName: user.companyName,
-    });
-  } catch (error) {
-    next(error);
-  }
+router.get('/me', requireAuth, (req, res) => {
+  res.json({
+    user: { 
+      id: req.user._id, 
+      email: req.user.email,
+      role: req.user.role,
+      companyName: req.user.companyName || null,
+    },
+  });
 });
 
 export default router;
