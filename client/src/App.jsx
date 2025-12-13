@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './authContext';
+import Landing from './pages/Landing';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 
@@ -34,7 +35,7 @@ function PublicRoute({ children }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Landing />} />
       <Route
         path="/login"
         element={
