@@ -39,13 +39,9 @@ A full-stack MERN (MongoDB, Express, React, Node.js) scaffold with JWT authentic
 ### 1. Clone & Install
 
 ```bash
-# Install server dependencies
-cd server
+# Install all dependencies (root + server + client)
 npm install
-
-# Install client dependencies
-cd ../client
-npm install
+npm run install:all
 ```
 
 ### 2. Configure Environment Variables
@@ -79,13 +75,14 @@ VITE_API_BASE_URL=http://localhost:3000/api
 ### 3. Start Development Servers
 
 ```bash
-# Terminal 1: Start server
-cd server
+# Run both server and client with one command
 npm run dev
+```
 
-# Terminal 2: Start client
-cd client
-npm run dev
+Or run separately in two terminals:
+```bash
+npm run server   # Backend on :3000
+npm run client   # Frontend on :5173
 ```
 
 The app will be available at:
