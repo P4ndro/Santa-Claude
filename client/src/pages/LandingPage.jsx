@@ -38,7 +38,7 @@ export default function LandingPage() {
                   Get Started
                 </Link>
                 <Link
-                  to="/interview"
+                  to="/signup"
                   className="px-8 py-3 bg-white text-black border-2 border-black rounded-md hover:bg-gray-50 transition-colors text-center font-medium"
                   aria-label="Try Demo Interview"
                 >

@@ -36,10 +36,10 @@ export default function Navbar() {
               My Profile
             </Link>
             <Link
-              to="/report"
+              to="/home"
               className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
             >
-              Reports
+              Interviews
             </Link>
             {localStorage.getItem('userRole') === 'organization' && (
               <Link
