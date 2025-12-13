@@ -1,47 +1,61 @@
 import { useState } from 'react';
-import Navbar from '../components/Navbar';
-import PlaceholderChart from '../components/PlaceholderChart';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../authContext';
+import { homePageStyles } from './homePageStyles';
 
 export default function CompanyDashboard() {
-  // Mock data - replace with actual API calls
-  const [stats] = useState({
-    totalInterviews: 124,
-    averageScore: 78,
-    activePositions: 8,
-    candidatesThisMonth: 45,
-  });
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const companyName = localStorage.getItem('companyName') || 'Your Company';
+  const [searchInput, setSearchInput] = useState('');
+  const [activeNav, setActiveNav] = useState('dashboard');
 
+  // Job management state
   const [jobs, setJobs] = useState([
-    { id: 1, title: 'Software Engineer', description: 'Full-stack developer needed', applicants: 12 },
-    { id: 2, title: 'Frontend Developer', description: 'React/TypeScript expert', applicants: 8 },
-    { id: 3, title: 'Backend Engineer', description: 'Node.js/Python developer', applicants: 15 },
+    { id: 1, title: 'Software Engineer', description: 'Full-stack developer needed', applicants: 12, status: 'Active' },
+    { id: 2, title: 'Frontend Developer', description: 'React/TypeScript expert', applicants: 8, status: 'Active' },
+    { id: 3, title: 'Backend Engineer', description: 'Node.js/Python developer', applicants: 15, status: 'Paused' },
   ]);
 
   const [editingJob, setEditingJob] = useState(null);
   const [showJobForm, setShowJobForm] = useState(false);
   const [jobForm, setJobForm] = useState({ title: '', description: '' });
 
+  // Stats
+  const stats = {
+    totalInterviews: 124,
+    averageScore: 78,
+    activePositions: jobs.filter(j => j.status === 'Active').length,
+    candidatesThisMonth: 45,
+  };
+
+  // Recent candidates
   const recentCandidates = [
-    { id: 1, name: 'John Doe', position: 'Software Engineer', score: 85, date: '2024-01-15', jobId: 1 },
-    { id: 2, name: 'Jane Smith', position: 'Frontend Developer', score: 92, date: '2024-01-14', jobId: 2 },
-    { id: 3, name: 'Bob Johnson', position: 'Backend Engineer', score: 76, date: '2024-01-13', jobId: 3 },
+    { id: 1, name: 'John Doe', position: 'Software Engineer', score: 85, date: '2024-01-15' },
+    { id: 2, name: 'Jane Smith', position: 'Frontend Developer', score: 92, date: '2024-01-14' },
+    { id: 3, name: 'Bob Johnson', position: 'Backend Engineer', score: 76, date: '2024-01-13' },
   ];
 
-  // Common failure modes analytics - TODO: Replace with actual analytics from backend
-  const commonFailureModes = [
-    { mode: 'Filler Words', count: 45, percentage: 36 },
-    { mode: 'Answer Length', count: 32, percentage: 26 },
-    { mode: 'Structure Issues', count: 28, percentage: 23 },
-    { mode: 'Eye Contact', count: 15, percentage: 12 },
+  // Failure modes
+  const failureModes = [
+    { mode: 'Filler Words', percentage: 36 },
+    { mode: 'Answer Length', percentage: 26 },
+    { mode: 'Structure Issues', percentage: 23 },
   ];
+
+  const handleLogout = () => {
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('companyName');
+    navigate('/');
+  };
 
   const handleAddJob = () => {
-    // TODO: Add job via API
     const newJob = {
       id: jobs.length + 1,
       title: jobForm.title,
       description: jobForm.description,
       applicants: 0,
+      status: 'Active',
     };
     setJobs([...jobs, newJob]);
     setJobForm({ title: '', description: '' });
@@ -55,7 +69,6 @@ export default function CompanyDashboard() {
   };
 
   const handleUpdateJob = () => {
-    // TODO: Update job via API
     setJobs(jobs.map(job => 
       job.id === editingJob.id 
         ? { ...job, title: jobForm.title, description: jobForm.description }
@@ -67,98 +80,300 @@ export default function CompanyDashboard() {
   };
 
   const handleDeleteJob = (jobId) => {
-    // TODO: Delete job via API
     if (window.confirm('Are you sure you want to delete this job?')) {
       setJobs(jobs.filter(job => job.id !== jobId));
     }
   };
 
-  const handleViewApplicants = (jobId) => {
-    // TODO: Navigate to applicants list for this job
-    console.log('View applicants for job:', jobId);
-  };
-
-  const handleViewReport = (candidateId) => {
-    // TODO: Navigate to candidate report
-    console.log('View report for candidate:', candidateId);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-900">
-      <Navbar />
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Company Dashboard</h1>
-          <p className="text-slate-400">Overview of your hiring process</p>
-        </div>
+    <>
+      <style>{homePageStyles}</style>
+      <div className="dashboard-container">
+        {/* Left Sidebar */}
+        <aside className="sidebar-left">
+          <div className="profile-header">
+            <div className="profile-avatar">
+              <i className="fas fa-building"></i>
+            </div>
+            <div className="profile-info">
+              <h3>{companyName}</h3>
+              <p>{user?.email || 'company@example.com'}</p>
+            </div>
+          </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-            <p className="text-slate-400 text-sm mb-1">Total Interviews</p>
-            <p className="text-3xl font-bold text-white">{stats.totalInterviews}</p>
-          </div>
-          <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-            <p className="text-slate-400 text-sm mb-1">Average Score</p>
-            <p className="text-3xl font-bold text-white">{stats.averageScore}%</p>
-          </div>
-          <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-            <p className="text-slate-400 text-sm mb-1">Active Positions</p>
-            <p className="text-3xl font-bold text-white">{stats.activePositions}</p>
-          </div>
-          <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-            <p className="text-slate-400 text-sm mb-1">Candidates This Month</p>
-            <p className="text-3xl font-bold text-white">{stats.candidatesThisMonth}</p>
-          </div>
-        </div>
-
-        {/* Job Management Section */}
-        <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-white">Job Descriptions</h2>
-            <button
-              onClick={() => {
-                setShowJobForm(true);
-                setEditingJob(null);
-                setJobForm({ title: '', description: '' });
+          <nav className="nav-links">
+            <a
+              href="#"
+              className={`nav-link ${activeNav === 'dashboard' ? 'active' : ''}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav('dashboard');
               }}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-md transition-colors"
             >
-              Add Job
-            </button>
+              <i className="fas fa-th-large"></i>
+              <span>Dashboard</span>
+            </a>
+            <a
+              href="#"
+              className={`nav-link ${activeNav === 'jobs' ? 'active' : ''}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav('jobs');
+              }}
+            >
+              <i className="fas fa-briefcase"></i>
+              <span>Job Positions</span>
+            </a>
+            <a
+              href="#"
+              className={`nav-link ${activeNav === 'candidates' ? 'active' : ''}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav('candidates');
+              }}
+            >
+              <i className="fas fa-users"></i>
+              <span>Candidates</span>
+            </a>
+            <a
+              href="#"
+              className={`nav-link ${activeNav === 'analytics' ? 'active' : ''}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav('analytics');
+              }}
+            >
+              <i className="fas fa-chart-bar"></i>
+              <span>Analytics</span>
+            </a>
+            <a
+              href="#"
+              className={`nav-link ${activeNav === 'reports' ? 'active' : ''}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav('reports');
+              }}
+            >
+              <i className="fas fa-file-alt"></i>
+              <span>Reports</span>
+            </a>
+          </nav>
+
+          <div className="nav-footer">
+            <a href="#" className="nav-link" onClick={(e) => {
+              e.preventDefault();
+              setActiveNav('settings');
+            }}>
+              <i className="fas fa-cog"></i>
+              <span>Settings</span>
+            </a>
+            <a href="#" className="nav-link" onClick={(e) => {
+              e.preventDefault();
+              handleLogout();
+            }}>
+              <i className="fas fa-sign-out-alt"></i>
+              <span>Log out</span>
+            </a>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="main-content">
+          <div className="top-bar">
+            <h1>Company Dashboard</h1>
+            <div className="search-bar">
+              <i className="fas fa-search"></i>
+              <input
+                type="text"
+                placeholder="Search candidates, jobs..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+            </div>
+            <div className="action-icons">
+              <div className="action-icon">
+                <i className="fas fa-bell"></i>
+              </div>
+              <div className="action-icon">
+                <i className="fas fa-envelope"></i>
+              </div>
+              <div className="action-icon">
+                <i className="fas fa-question-circle"></i>
+              </div>
+            </div>
           </div>
 
-          {/* Job Form */}
-          {showJobForm && (
-            <div className="mb-6 p-4 bg-slate-900 rounded-md border border-slate-700">
-              <h3 className="text-lg font-semibold text-white mb-4">
-                {editingJob ? 'Edit Job' : 'Add New Job'}
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-slate-400 mb-2">Job Title</label>
+          {/* Stats Widget Grid */}
+          <div className="widget-grid">
+            {/* Card 1: Total Interviews */}
+            <div className="widget-card">
+              <div className="widget-header">
+                <div className="widget-icon">
+                  <i className="fas fa-video"></i>
+                </div>
+                <div className="widget-info">
+                  <h3>Total Interviews</h3>
+                  <p>All time conducted</p>
+                </div>
+              </div>
+              <div className="widget-details">
+                <div style={{ fontSize: '36px', fontWeight: '700', color: '#111827' }}>{stats.totalInterviews}</div>
+                <div className="widget-stats">
+                  <span><i className="fas fa-arrow-up" style={{ color: '#27ae60' }}></i> 12% from last month</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Average Score */}
+            <div className="widget-card">
+              <span className="widget-badge">Performance</span>
+              <div className="widget-header">
+                <div className="widget-icon">
+                  <i className="fas fa-chart-line"></i>
+                </div>
+                <div className="widget-info">
+                  <h3>Average Score</h3>
+                  <p>Candidate performance</p>
+                </div>
+              </div>
+              <div className="widget-details">
+                <div style={{ fontSize: '36px', fontWeight: '700', color: '#111827' }}>{stats.averageScore}%</div>
+              </div>
+              <div className="progress-bar">
+                <div className="progress-info">
+                  <span>Overall Rating</span>
+                  <span>{stats.averageScore}%</span>
+                </div>
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${stats.averageScore}%` }}></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Active Positions */}
+            <div className="widget-card">
+              <div className="widget-header">
+                <div className="widget-icon">
+                  <i className="fas fa-briefcase"></i>
+                </div>
+                <div className="widget-info">
+                  <h3>Active Positions</h3>
+                  <p>Currently hiring</p>
+                </div>
+              </div>
+              <div className="widget-details">
+                <div style={{ fontSize: '36px', fontWeight: '700', color: '#111827' }}>{stats.activePositions}</div>
+                <div className="widget-stats">
+                  <span><i className="fas fa-clock"></i> 2 closing soon</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Candidates This Month */}
+            <div className="widget-card">
+              <span className="widget-badge">New</span>
+              <div className="widget-header">
+                <div className="widget-icon">
+                  <i className="fas fa-user-plus"></i>
+                </div>
+                <div className="widget-info">
+                  <h3>New Candidates</h3>
+                  <p>This month</p>
+                </div>
+              </div>
+              <div className="widget-details">
+                <div style={{ fontSize: '36px', fontWeight: '700', color: '#111827' }}>{stats.candidatesThisMonth}</div>
+                <div className="widget-stats">
+                  <span><i className="fas fa-arrow-up" style={{ color: '#27ae60' }}></i> 23% increase</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Job Positions Section */}
+          <div className="calendar-section" style={{ marginBottom: '20px' }}>
+            <div className="calendar-header">
+              <h2>Job Positions</h2>
+              <button 
+                onClick={() => {
+                  setShowJobForm(true);
+                  setEditingJob(null);
+                  setJobForm({ title: '', description: '' });
+                }}
+                style={{
+                  padding: '10px 20px',
+                  background: '#111827',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                <i className="fas fa-plus"></i> Add Job
+              </button>
+            </div>
+
+            {/* Job Form */}
+            {showJobForm && (
+              <div style={{
+                background: '#f9fafb',
+                borderRadius: '10px',
+                padding: '20px',
+                marginBottom: '20px',
+                border: '1px solid #e5e7eb'
+              }}>
+                <h3 style={{ marginBottom: '15px', color: '#111827' }}>
+                  {editingJob ? 'Edit Job' : 'Add New Job'}
+                </h3>
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', color: '#6b7280' }}>Job Title</label>
                   <input
                     type="text"
                     value={jobForm.title}
                     onChange={(e) => setJobForm({ ...jobForm, title: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                     placeholder="e.g., Software Engineer"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      outline: 'none'
+                    }}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm text-slate-400 mb-2">Description</label>
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', color: '#6b7280' }}>Description</label>
                   <textarea
                     value={jobForm.description}
                     onChange={(e) => setJobForm({ ...jobForm, description: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"
                     placeholder="Job description and requirements"
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      resize: 'none'
+                    }}
                   />
                 </div>
-                <div className="flex gap-2">
+                <div style={{ display: 'flex', gap: '10px' }}>
                   <button
                     onClick={editingJob ? handleUpdateJob : handleAddJob}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-md transition-colors"
+                    style={{
+                      padding: '10px 20px',
+                      background: '#111827',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      cursor: 'pointer'
+                    }}
                   >
                     {editingJob ? 'Update' : 'Add'} Job
                   </button>
@@ -168,117 +383,264 @@ export default function CompanyDashboard() {
                       setEditingJob(null);
                       setJobForm({ title: '', description: '' });
                     }}
-                    className="px-4 py-2 border border-slate-600 hover:border-slate-500 text-slate-300 hover:text-white font-medium rounded-md transition-colors"
+                    style={{
+                      padding: '10px 20px',
+                      background: 'transparent',
+                      color: '#6b7280',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      cursor: 'pointer'
+                    }}
                   >
                     Cancel
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* Jobs List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {jobs.map((job) => (
+                <div 
+                  key={job.id} 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '15px 20px',
+                    background: '#f9fafb',
+                    borderRadius: '10px',
+                    border: '1px solid #e5e7eb',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+                      <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#111827' }}>{job.title}</h4>
+                      <span style={{
+                        padding: '3px 10px',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        background: job.status === 'Active' ? '#dcfce7' : '#f3f4f6',
+                        color: job.status === 'Active' ? '#16a34a' : '#6b7280'
+                      }}>
+                        {job.status}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '5px' }}>{job.description}</p>
+                    <p style={{ fontSize: '12px', color: '#9ca3af' }}>{job.applicants} applicants</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => handleEditJob(job)}
+                      style={{
+                        padding: '8px 15px',
+                        background: 'transparent',
+                        color: '#6b7280',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteJob(job.id)}
+                      style={{
+                        padding: '8px 15px',
+                        background: 'transparent',
+                        color: '#ef4444',
+                        border: '1px solid #fecaca',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-
-          {/* Jobs List */}
-          <div className="space-y-3">
-            {jobs.map((job) => (
-              <div key={job.id} className="p-4 bg-slate-900 rounded-md border border-slate-700 flex items-center justify-between">
-                <div className="flex-1">
-                  <h3 className="text-white font-semibold mb-1">{job.title}</h3>
-                  <p className="text-slate-400 text-sm mb-2">{job.description}</p>
-                  <p className="text-slate-500 text-xs">Applicants: {job.applicants}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEditJob(job)}
-                    className="px-3 py-1 text-sm border border-slate-600 hover:border-slate-500 text-slate-300 hover:text-white rounded-md transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleViewApplicants(job.id)}
-                    className="px-3 py-1 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-md transition-colors"
-                  >
-                    View Applicants ({job.applicants})
-                  </button>
-                  <button
-                    onClick={() => handleDeleteJob(job.id)}
-                    className="px-3 py-1 text-sm border border-red-600 hover:border-red-500 text-red-400 hover:text-red-300 rounded-md transition-colors"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
           </div>
-        </div>
 
-        {/* Chart Section */}
-        <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700 mb-8">
-          <h2 className="text-xl font-semibold text-white mb-4">Interview Trends</h2>
-          <PlaceholderChart />
-          <p className="text-xs text-slate-400 mt-2">Analytics placeholder - Add real charts here</p>
-        </div>
-
-        {/* Common Failure Modes Analytics */}
-        <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700 mb-8">
-          <h2 className="text-xl font-semibold text-white mb-4">Common Failure Modes</h2>
-          <div className="space-y-3">
-            {commonFailureModes.map((mode, index) => (
-              <div key={index} className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-white font-medium">{mode.mode}</span>
-                    <span className="text-slate-400 text-sm">{mode.count} instances ({mode.percentage}%)</span>
-                  </div>
-                  <div className="w-full bg-slate-900 rounded-full h-2">
-                    <div
-                      className="bg-emerald-500 h-2 rounded-full"
-                      style={{ width: `${mode.percentage}%` }}
-                    />
-                  </div>
-                </div>
+          {/* Recent Candidates Table */}
+          <div className="calendar-section">
+            <div className="calendar-header">
+              <h2>Recent Candidates</h2>
+              <div className="calendar-toggle">
+                <i className="fas fa-filter"></i> Filter
               </div>
-            ))}
-          </div>
-          <p className="text-xs text-slate-400 mt-4">Analytics placeholder - Replace with real failure mode data</p>
-        </div>
-
-        {/* Recent Candidates */}
-        <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-          <h2 className="text-xl font-semibold text-white mb-4">Recent Candidates</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="text-left text-slate-400 font-medium py-3 px-4">Name</th>
-                  <th className="text-left text-slate-400 font-medium py-3 px-4">Position</th>
-                  <th className="text-left text-slate-400 font-medium py-3 px-4">Score</th>
-                  <th className="text-left text-slate-400 font-medium py-3 px-4">Date</th>
-                  <th className="text-left text-slate-400 font-medium py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentCandidates.map((candidate) => (
-                  <tr key={candidate.id} className="border-b border-slate-700">
-                    <td className="text-white py-3 px-4">{candidate.name}</td>
-                    <td className="text-slate-300 py-3 px-4">{candidate.position}</td>
-                    <td className="text-slate-300 py-3 px-4">{candidate.score}%</td>
-                    <td className="text-slate-300 py-3 px-4">{candidate.date}</td>
-                    <td className="py-3 px-4">
-                      <button
-                        onClick={() => handleViewReport(candidate.id)}
-                        className="text-emerald-400 hover:text-emerald-300 text-sm"
-                      >
-                        View Report
-                      </button>
-                    </td>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', fontWeight: '600', color: '#6b7280' }}>Candidate</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', fontWeight: '600', color: '#6b7280' }}>Position</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', fontWeight: '600', color: '#6b7280' }}>Score</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', fontWeight: '600', color: '#6b7280' }}>Date</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', fontWeight: '600', color: '#6b7280' }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {recentCandidates.map((candidate) => (
+                    <tr key={candidate.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '15px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '35px',
+                            height: '35px',
+                            borderRadius: '50%',
+                            background: '#111827',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '14px',
+                            fontWeight: '600'
+                          }}>
+                            {candidate.name.charAt(0)}
+                          </div>
+                          <span style={{ fontWeight: '500', color: '#111827' }}>{candidate.name}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '15px 12px', color: '#6b7280' }}>{candidate.position}</td>
+                      <td style={{ padding: '15px 12px' }}>
+                        <span style={{
+                          fontWeight: '600',
+                          color: candidate.score >= 85 ? '#16a34a' : candidate.score >= 70 ? '#ca8a04' : '#ef4444'
+                        }}>
+                          {candidate.score}%
+                        </span>
+                      </td>
+                      <td style={{ padding: '15px 12px', color: '#9ca3af', fontSize: '13px' }}>{candidate.date}</td>
+                      <td style={{ padding: '15px 12px' }}>
+                        <button
+                          onClick={() => navigate(`/report/${candidate.id}`)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#111827',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          View Report
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+
+        {/* Right Sidebar */}
+        <aside className="sidebar-right">
+          {/* Quick Stats */}
+          <div className="sidebar-section">
+            <h3>Quick Overview</h3>
+            <div className="video-preview" style={{ background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ textAlign: 'center', color: 'white' }}>
+                <div style={{ fontSize: '32px', fontWeight: '700' }}>{stats.totalInterviews}</div>
+                <div style={{ fontSize: '12px', opacity: 0.7 }}>Total Interviews</div>
+              </div>
+            </div>
+            <div className="interview-info">
+              <h4>This Week's Activity</h4>
+              <div className="interview-details">
+                <div className="detail-row">
+                  <span>New Applications:</span>
+                  <span>24</span>
+                </div>
+                <div className="detail-row">
+                  <span>Interviews Scheduled:</span>
+                  <span>8</span>
+                </div>
+                <div className="detail-row">
+                  <span>Offers Extended:</span>
+                  <span className="status-active">3</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Common Failure Modes */}
+          <div className="sidebar-section">
+            <h3>Common Failure Modes</h3>
+            <div className="performance-list">
+              {failureModes.map((mode, index) => (
+                <div key={index} className="performance-item">
+                  <div className="performance-icon">
+                    <i className={`fas ${
+                      mode.mode === 'Filler Words' ? 'fa-comment' :
+                      mode.mode === 'Answer Length' ? 'fa-align-left' : 'fa-sitemap'
+                    }`}></i>
+                  </div>
+                  <div className="performance-info">
+                    <h4>{mode.mode}</h4>
+                    <div style={{
+                      width: '100%',
+                      height: '4px',
+                      background: '#f3f4f6',
+                      borderRadius: '2px',
+                      marginTop: '5px'
+                    }}>
+                      <div style={{
+                        width: `${mode.percentage}%`,
+                        height: '100%',
+                        background: '#111827',
+                        borderRadius: '2px'
+                      }}></div>
+                    </div>
+                  </div>
+                  <div className="performance-badge">{mode.percentage}%</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="sidebar-section">
+            <h3>Quick Actions</h3>
+            <div className="notification-card" style={{ cursor: 'pointer', marginBottom: '10px' }} onClick={() => setShowJobForm(true)}>
+              <div className="notification-content">
+                <h4>Create New Position</h4>
+                <p>Post a new job opening</p>
+              </div>
+              <div className="notification-action">
+                <i className="fas fa-plus"></i>
+              </div>
+            </div>
+            <div className="notification-card" style={{ cursor: 'pointer', marginBottom: '10px' }}>
+              <div className="notification-content">
+                <h4>Export Reports</h4>
+                <p>Download candidate data</p>
+              </div>
+              <div className="notification-action">
+                <i className="fas fa-download"></i>
+              </div>
+            </div>
+            <div className="notification-card" style={{ cursor: 'pointer' }}>
+              <div className="notification-content">
+                <h4>View Analytics</h4>
+                <p>Detailed hiring insights</p>
+              </div>
+              <div className="notification-action">
+                <i className="fas fa-chart-pie"></i>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </>
   );
 }
-

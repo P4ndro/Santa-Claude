@@ -6,6 +6,8 @@ export default function SignupPage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [userRole, setUserRole] = useState('candidate'); // 'candidate' or 'company'
+  const [companyName, setCompanyName] = useState('');
   const [errors, setErrors] = useState({});
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -32,6 +34,10 @@ export default function SignupPage() {
       newErrors.password = 'Password is required';
     }
 
+    if (userRole === 'company' && !companyName) {
+      newErrors.companyName = 'Company name is required';
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -39,8 +45,14 @@ export default function SignupPage() {
 
     setErrors({});
     try {
+      // Store role in localStorage for demo purposes
+      localStorage.setItem('userRole', userRole);
+      if (userRole === 'company') {
+        localStorage.setItem('companyName', companyName);
+      }
       await register(email, password);
-      navigate('/home');
+      // Navigate based on role
+      navigate(userRole === 'company' ? '/company-dashboard' : '/home');
     } catch (err) {
       setErrors({ password: err.message || 'Registration failed' });
     }
@@ -78,13 +90,73 @@ export default function SignupPage() {
             Welcome to InterviewAI
           </h2>
 
+          {/* Role Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-3 text-center">
+              I am a
+            </label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setUserRole('candidate')}
+                className={`flex-1 py-3 px-4 rounded-full font-medium transition-all duration-200 transform hover:scale-105
+                  ${userRole === 'candidate'
+                    ? 'bg-black text-white shadow-md'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:border-gray-400'
+                  }`}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Candidate
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserRole('company')}
+                className={`flex-1 py-3 px-4 rounded-full font-medium transition-all duration-200 transform hover:scale-105
+                  ${userRole === 'company'
+                    ? 'bg-black text-white shadow-md'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:border-gray-400'
+                  }`}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  Company
+                </span>
+              </button>
+            </div>
+          </div>
+
           {/* Signup Fields */}
           <div className="space-y-5">
+            {/* Company Name Input (only for company role) */}
+            {userRole === 'company' && (
+              <div className="animate-fadeIn">
+                <input
+                  type="text"
+                  placeholder="Company Name"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className={`w-full px-4 py-3 border ${
+                    errors.companyName ? 'border-red-500' : 'border-gray-300'
+                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 transition-all`}
+                />
+                {errors.companyName && (
+                  <p className="text-red-500 text-sm mt-1">{errors.companyName}</p>
+                )}
+              </div>
+            )}
+
             {/* Username Input */}
             <div>
               <input
                 type="text"
-                placeholder="Username"
+                placeholder={userRole === 'company' ? 'Admin Username' : 'Username'}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 onKeyPress={handleKeyPress}
