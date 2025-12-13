@@ -10,7 +10,9 @@ export function AuthProvider({ children }) {
   // Fetch current user from /api/auth/me
   const fetchUser = async () => {
     try {
-      const userData = await api.me();
+      const response = await api.me();
+      // API returns { user: {...} }, extract the user object
+      const userData = response.user || response;
       setUser(userData);
       return userData;
     } catch (err) {
@@ -40,14 +42,16 @@ export function AuthProvider({ children }) {
     setAccessToken(data.accessToken);
     // Fetch user details including role
     const userData = await fetchUser();
+    // Return userData directly since fetchUser already extracts it
     return { ...data, user: userData };
   };
 
   const register = async (email, password, role = 'candidate', companyName = '') => {
     const data = await api.register(email, password, role, companyName);
     setAccessToken(data.accessToken);
-    // Fetch user details including role
+    // Fetch user details including role  
     const userData = await fetchUser();
+    // Return userData directly since fetchUser already extracts it
     return { ...data, user: userData };
   };
 
