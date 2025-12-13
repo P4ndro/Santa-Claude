@@ -168,39 +168,7 @@ export default function HomePage() {
 
             {/* Widget Grid */}
             <div className="widget-grid">
-              {/* Card 1: Job Interview Prep */}
-              <div 
-                className="widget-card" 
-                onClick={() => navigate('/interview')}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="widget-header">
-                  <div className="widget-icon">
-                    <i className="fas fa-laptop-code"></i>
-                  </div>
-                  <div className="widget-info">
-                    <h3>Job Interview Prep</h3>
-                    <p>Master your interview skills</p>
-                  </div>
-                </div>
-                <div className="widget-details">
-                  <div>Starts now, Online Session</div>
-                  <div className="widget-stats">
-                    <span><i className="fas fa-users"></i> 100 users</span>
-                  </div>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-info">
-                    <span>Session 1/5</span>
-                    <span>20% completed</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: '20%' }}></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 2: AI Recruiter */}
+              {/* Card 1: AI Recruiter */}
               <div className="widget-card">
                 <span className="widget-badge">Practice</span>
                 <div className="widget-header">
@@ -212,24 +180,11 @@ export default function HomePage() {
                     <p>Simulate your interview!</p>
                   </div>
                 </div>
-                <div className="widget-details">
-                  <div>Available 24/7</div>
-                  <div className="widget-stats">
-                    <span><i className="fas fa-users"></i> 50 users</span>
-                  </div>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-info">
-                    <span>Session 2/5</span>
-                    <span>40% completed</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: '40%' }}></div>
-                  </div>
-                </div>
+                
+
               </div>
 
-              {/* Card 3: Performance */}
+              {/* Card 2: Performance */}
               <div className="widget-card">
                 <span className="widget-badge">Results</span>
                 <div className="widget-header">
@@ -241,42 +196,8 @@ export default function HomePage() {
                     <p>Track your progress</p>
                   </div>
                 </div>
-                <div className="widget-details">
-                  <div>View Feedback</div>
-                  <div>Detailed Performance Report</div>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-info">
-                    <span>Current Status</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: '75%' }}></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 4: Locked Feature */}
-              <div className="widget-card">
-                <div className="locked-card">
-                  <div className="widget-header">
-                    <div className="widget-icon">
-                      <i className="fas fa-lock"></i>
-                    </div>
-                    <div className="widget-info">
-                      <h3>Interview</h3>
-                      <p>Review with AI insights</p>
-                    </div>
-                  </div>
-                  <div className="widget-details">
-                    <div>Next Review: Anytime</div>
-                    <div>Feedback session online</div>
-                  </div>
-                </div>
-                <div className="upgrade-overlay">
-                  <button className="upgrade-btn" onClick={handleUpgrade}>
-                    UPGRADE PLAN
-                  </button>
-                </div>
+                
+                
               </div>
             </div>
 
@@ -305,9 +226,6 @@ export default function HomePage() {
                     }`}
                   >
                     {day}
-                    {day === 4 && <div className="calendar-event">Job Interview</div>}
-                    {day === 10 && <div className="calendar-event">AI Recruiter</div>}
-                    {day === 15 && <div className="calendar-event">Performance</div>}
                   </div>
                 ))}
               </div>
@@ -316,33 +234,6 @@ export default function HomePage() {
 
           {/* Right Sidebar */}
           <aside className="sidebar-right">
-            {/* Upcoming Interviews */}
-            <div className="sidebar-section">
-              <h3>Upcoming Interviews</h3>
-              <div className="video-preview">
-                <div className="play-button">
-                  <i className="fas fa-play"></i>
-                </div>
-              </div>
-              <div className="interview-info">
-                <h4>Software Engineer</h4>
-                <div className="interview-details">
-                  <div className="detail-row">
-                    <span>Ends in:</span>
-                    <span>30 min</span>
-                  </div>
-                  <div className="detail-row">
-                    <span>Participants online:</span>
-                    <span>15/20</span>
-                  </div>
-                  <div className="detail-row">
-                    <span>Status:</span>
-                    <span className="status-active">Active</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Performance Summary */}
             <div className="sidebar-section">
               <h3>Performance Summary</h3>
