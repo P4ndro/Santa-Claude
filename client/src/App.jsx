@@ -1,16 +1,21 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './authContext';
-import Landing from './pages/Landing';
-import AuthPage from './pages/AuthPage';
-import Dashboard from './pages/Dashboard';
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import HomePage from './pages/HomePage';
+import InterviewPage from './pages/InterviewPage';
+import ReportPage from './pages/ReportPage';
+import ProfilePage from './pages/ProfilePage';
+import CompanyDashboard from './pages/CompanyDashboard';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="text-slate-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-black">Loading...</div>
       </div>
     );
   }
@@ -19,44 +24,126 @@ function ProtectedRoute({ children }) {
 }
 
 function PublicRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="text-slate-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-black">Loading...</div>
       </div>
     );
   }
 
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
+  if (isAuthenticated) {
+    // Redirect companies to their dashboard, candidates to home
+    if (user?.role === 'company') {
+      return <Navigate to="/company-dashboard" replace />;
+    }
+    return <Navigate to="/home" replace />;
+  }
+
+  return children;
+}
+
+// Guard to redirect companies away from home page
+function HomePageGuard({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-black">Loading...</div>
+      </div>
+    );
+  }
+
+  if (user?.role === 'company') {
+    return <Navigate to="/company-dashboard" replace />;
+  }
+
+  return children;
+}
+
+// Guard to redirect companies away from interview pages
+function InterviewPageGuard({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-black">Loading...</div>
+      </div>
+    );
+  }
+
+  if (user?.role === 'company') {
+    return <Navigate to="/company-dashboard" replace />;
+  }
+
+  return children;
 }
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<LandingPage />} />
       <Route
         path="/login"
         element={
           <PublicRoute>
-            <AuthPage mode="login" />
+            <LoginPage />
           </PublicRoute>
         }
       />
       <Route
-        path="/register"
+        path="/signup"
         element={
           <PublicRoute>
-            <AuthPage mode="register" />
+            <SignupPage />
           </PublicRoute>
         }
       />
       <Route
-        path="/dashboard"
+        path="/home"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <HomePageGuard>
+              <HomePage />
+            </HomePageGuard>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/interview/:id"
+        element={
+          <ProtectedRoute>
+            <InterviewPageGuard>
+              <InterviewPage />
+            </InterviewPageGuard>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/report/:id"
+        element={
+          <ProtectedRoute>
+            <ReportPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/company-dashboard"
+        element={
+          <ProtectedRoute>
+            <CompanyDashboard />
           </ProtectedRoute>
         }
       />

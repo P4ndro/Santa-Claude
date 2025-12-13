@@ -52,6 +52,9 @@ async function request(endpoint, options = {}) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
 
+  // Debug logging
+  console.log(`[API] ${options.method || 'GET'} ${endpoint}`, { hasToken: !!accessToken });
+
   let response = await fetch(url, config);
 
   // If 401, try to refresh and retry once
@@ -70,10 +73,21 @@ async function request(endpoint, options = {}) {
     }
   }
 
-  const data = await response.json();
+  // Handle empty responses
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    throw new Error('Invalid JSON response from server');
+  }
 
   if (!response.ok) {
-    throw new Error(data.error || 'Request failed');
+    const errorMessage = data.error || data.message || `Request failed with status ${response.status}`;
+    throw new Error(errorMessage);
   }
 
   return data;
@@ -81,10 +95,11 @@ async function request(endpoint, options = {}) {
 
 // Auth API
 export const api = {
-  register: (email, password) =>
+  // Auth
+  register: (email, password, role = 'candidate', companyName = '') =>
     request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, role, companyName }),
     }),
 
   login: (email, password) =>
@@ -101,6 +116,75 @@ export const api = {
   me: () => request('/auth/me'),
 
   protected: () => request('/protected'),
+
+  // Interviews
+  startInterview: () =>
+    request('/interviews/start', { method: 'POST' }),
+
+  applyToJob: (jobId) =>
+    request(`/interviews/apply/${jobId}`, { method: 'POST' }),
+
+  getInterview: (interviewId) =>
+    request(`/interviews/${interviewId}`),
+
+  submitAnswer: (interviewId, questionId, transcript, skipped = false) =>
+    request(`/interviews/${interviewId}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ questionId, transcript, skipped }),
+    }),
+
+  completeInterview: (interviewId) =>
+    request(`/interviews/${interviewId}/complete`, { method: 'POST' }),
+
+  getReport: (interviewId) =>
+    request(`/interviews/${interviewId}/report`),
+
+  listInterviews: () =>
+    request('/interviews'),
+
+  // Jobs
+  listJobs: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return request(`/jobs${queryString ? `?${queryString}` : ''}`);
+  },
+
+  createJob: (jobData) =>
+    request('/jobs', {
+      method: 'POST',
+      body: JSON.stringify(jobData),
+    }),
+
+  updateJob: (jobId, jobData) =>
+    request(`/jobs/${jobId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(jobData),
+    }),
+
+  deleteJob: (jobId) =>
+    request(`/jobs/${jobId}`, {
+      method: 'DELETE',
+    }),
+
+  getJob: (jobId) =>
+    request(`/jobs/${jobId}`),
+
+  // Company-specific job endpoints
+  getMyJobs: () =>
+    request('/jobs/company/my-jobs'),
+
+  getJobApplicants: (jobId) =>
+    request(`/jobs/${jobId}/applicants`),
+
+  // Users
+  getMyStats: () =>
+    request('/users/me/stats'),
+  
+  getProfile: () =>
+    request('/users/me/profile'),
+
+  // Analytics
+  getFailureModes: () =>
+    request('/users/me/analytics/failure-modes'),
 };
 
 export default api;
