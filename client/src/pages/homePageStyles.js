@@ -186,14 +186,14 @@ export const homePageStyles = `
   .widget-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-    margin-bottom: 30px;
+    gap: 30px;
+    margin-bottom: 45px;
   }
 
   .widget-card {
     background: white;
-    border-radius: 15px;
-    padding: 25px;
+    border-radius: 22px;
+    padding: 37px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
     transition: all 0.3s ease;
     position: relative;
@@ -201,84 +201,84 @@ export const homePageStyles = `
   }
 
   .widget-card:hover {
-    transform: translateY(-5px);
+    transform: translateY(-7px);
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
   }
 
   .widget-header {
     display: flex;
     align-items: flex-start;
-    gap: 15px;
-    margin-bottom: 15px;
+    gap: 18px;
+    margin-bottom: 18px;
   }
 
   .widget-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 12px;
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
     background: #111827;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 29px;
     color: white;
   }
 
   .widget-info h3 {
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 600;
     color: #111827;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
   }
 
   .widget-info p {
-    font-size: 13px;
+    font-size: 16px;
     color: #6b7280;
   }
 
   .widget-badge {
     position: absolute;
-    top: 20px;
-    right: 20px;
-    padding: 5px 12px;
+    top: 30px;
+    right: 30px;
+    padding: 6px 14px;
     border-radius: 20px;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
     background: #111827;
     color: white;
   }
 
   .widget-details {
-    margin: 15px 0;
+    margin: 18px 0;
     color: #555;
-    font-size: 14px;
+    font-size: 17px;
     line-height: 1.6;
   }
 
   .widget-stats {
     display: flex;
-    gap: 15px;
-    font-size: 13px;
+    gap: 18px;
+    font-size: 16px;
     color: #7f8c8d;
-    margin-top: 10px;
+    margin-top: 12px;
   }
 
   .progress-bar {
-    margin-top: 15px;
-    padding-top: 15px;
+    margin-top: 18px;
+    padding-top: 18px;
     border-top: 1px solid #f0f0f0;
   }
 
   .progress-info {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: 14px;
     color: #7f8c8d;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
 
   .progress-track {
-    height: 8px;
+    height: 10px;
     background: #f0f0f0;
     border-radius: 10px;
     overflow: hidden;
@@ -359,6 +359,7 @@ export const homePageStyles = `
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 10px;
+    max-width: 50%;
   }
 
   .calendar-day-header {
