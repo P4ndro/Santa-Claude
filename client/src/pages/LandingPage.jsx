@@ -1,11 +1,14 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
+import { useAuth } from '../authContext';
 import LandingNavbar from '../components/LandingNavbar';
 import FeatureCard from '../components/FeatureCard';
 import TestimonialCard from '../components/TestimonialCard';
 import StepCard from '../components/StepCard';
 
 export default function LandingPage() {
+  const { isAuthenticated, user, loading } = useAuth();
+
   useEffect(() => {
     // Add smooth scroll behavior
     document.documentElement.style.scrollBehavior = 'smooth';
@@ -13,6 +16,16 @@ export default function LandingPage() {
       document.documentElement.style.scrollBehavior = 'auto';
     };
   }, []);
+
+  // If company is logged in, redirect to dashboard
+  if (!loading && isAuthenticated && user?.role === 'company') {
+    return <Navigate to="/company-dashboard" replace />;
+  }
+
+  // If candidate is logged in, redirect to home
+  if (!loading && isAuthenticated && user?.role === 'candidate') {
+    return <Navigate to="/home" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -37,13 +50,15 @@ export default function LandingPage() {
                 >
                   Get Started
                 </Link>
-                <Link
-                  to="/interview"
-                  className="px-8 py-3 bg-white text-black border-2 border-black rounded-md hover:bg-gray-50 transition-colors text-center font-medium"
-                  aria-label="Try Demo Interview"
-                >
-                  Try Demo Interview
-                </Link>
+                {!isAuthenticated && (
+                  <Link
+                    to="/signup"
+                    className="px-8 py-3 bg-white text-black border-2 border-black rounded-md hover:bg-gray-50 transition-colors text-center font-medium"
+                    aria-label="Try Demo Interview"
+                  >
+                    Try Demo Interview
+                  </Link>
+                )}
               </div>
             </div>
             <div className="animate-fade-in-delay">

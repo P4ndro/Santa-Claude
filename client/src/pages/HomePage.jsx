@@ -10,16 +10,18 @@ export default function HomePage() {
   const navigate = useNavigate();
   const userRole = user?.role || 'candidate';
 
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
+  const [startingInterview, setStartingInterview] = useState(false);
+  const [error, setError] = useState('');
+  const [jobs, setJobs] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+
   // Redirect company users to company dashboard
   useEffect(() => {
     if (user?.role === 'company') {
       navigate('/company-dashboard', { replace: true });
     }
   }, [user?.role, navigate]);
-  const [startingInterview, setStartingInterview] = useState(false);
-  const [error, setError] = useState('');
-  const [jobs, setJobs] = useState([]);
-  const [loadingJobs, setLoadingJobs] = useState(true);
 
   // Fetch jobs from API
   useEffect(() => {
@@ -36,12 +38,19 @@ export default function HomePage() {
       }
     }
 
+    // Only fetch jobs if user is a candidate
     if (userRole === 'candidate') {
       fetchJobs();
     } else {
       setLoadingJobs(false);
     }
   }, [userRole]);
+
+  // NOW we can have conditional returns AFTER all hooks
+  // Don't render anything for companies (they should be redirected)
+  if (user?.role === 'company') {
+    return null;
+  }
 
   // Candidate View
   if (userRole === 'candidate') {
@@ -99,7 +108,7 @@ export default function HomePage() {
     );
   }
 
-  // Organization View
+  // Organization View (fallback - should not be reached if redirect works)
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -126,4 +135,3 @@ export default function HomePage() {
     </div>
   );
 }
-

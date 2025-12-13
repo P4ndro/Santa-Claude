@@ -27,28 +27,55 @@ export default function CompanyDashboard() {
   const [recentCandidates, setRecentCandidates] = useState([]);
   const [commonFailureModes, setCommonFailureModes] = useState([]);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+  const [selectedJobApplicants, setSelectedJobApplicants] = useState(null);
+  const [loadingApplicants, setLoadingApplicants] = useState(false);
+  const [expandedJobs, setExpandedJobs] = useState(new Set()); // Track which job descriptions are expanded
 
-  // Fetch jobs on mount
-  useEffect(() => {
-    async function fetchJobs() {
-      try {
-        setLoadingJobs(true);
-        setError('');
-        const data = await api.listJobs();
-        setJobs(data.jobs || []);
-        // Update stats based on fetched jobs
-        setStats(prev => ({
-          ...prev,
-          activePositions: data.jobs?.length || 0,
-        }));
-      } catch (err) {
-        console.error('Failed to load jobs:', err);
-        setError(err.message || 'Failed to load jobs');
-      } finally {
-        setLoadingJobs(false);
-      }
+  // Function to fetch company data
+  const fetchCompanyData = async () => {
+    try {
+      setLoadingJobs(true);
+      setError('');
+      
+      // Fetch company's own jobs
+      const jobsData = await api.getMyJobs();
+      const companyJobs = (jobsData.jobs || []).map(job => {
+        const jobId = job._id || job.id;
+        return {
+          id: jobId.toString(),
+          _id: jobId,
+          title: job.title,
+          level: job.level,
+          description: job.description,
+          location: job.location,
+          employmentType: job.employmentType,
+          status: job.status,
+          createdAt: job.createdAt,
+          applicants: 0, // Will be updated when we fetch applicants
+        };
+      });
+      setJobs(companyJobs);
+
+      // Fetch company stats
+      const statsData = await api.getMyStats();
+      setStats({
+        totalInterviews: statsData.interviewsCompleted || 0,
+        averageScore: 0, // Calculate from applicants if needed
+        activePositions: statsData.jobsPosted || companyJobs.length,
+        candidatesThisMonth: statsData.totalApplicants || 0,
+      });
+    } catch (err) {
+      console.error('Failed to load company data:', err);
+      setError(err.message || 'Failed to load company data');
+    } finally {
+      setLoadingJobs(false);
+      setLoadingAnalytics(false);
     }
-    fetchJobs();
+  };
+
+  // Fetch company data on mount
+  useEffect(() => {
+    fetchCompanyData();
   }, []);
 
   const handleAddJob = async () => {
@@ -60,13 +87,6 @@ export default function CompanyDashboard() {
 
     try {
       setError('');
-      console.log('Creating job with data:', {
-        title: jobForm.title,
-        level: jobForm.level,
-        description: jobForm.description,
-        location: jobForm.location,
-        employmentType: jobForm.employmentType,
-      });
       const response = await api.createJob({
         title: jobForm.title,
         level: jobForm.level,
@@ -74,8 +94,9 @@ export default function CompanyDashboard() {
         location: jobForm.location,
         employmentType: jobForm.employmentType,
       });
-      const newJob = response.job || response; // Handle both formats
-      setJobs([...jobs, newJob]);
+      const job = response.job || response;
+      // Refresh jobs list to get the full job object from backend
+      await fetchCompanyData();
       setJobForm({ 
         title: '', 
         description: '', 
@@ -110,17 +131,16 @@ export default function CompanyDashboard() {
   const handleUpdateJob = async () => {
     try {
       setError('');
-      const response = await api.updateJob(editingJob.id, {
+      const jobId = editingJob.id || editingJob._id;
+      const response = await api.updateJob(jobId, {
         title: jobForm.title,
         level: jobForm.level,
         description: jobForm.description,
         location: jobForm.location,
         employmentType: jobForm.employmentType,
       });
-      const updatedJob = response.job || response; // Handle both formats
-      setJobs(jobs.map(job => 
-        job.id === editingJob.id ? updatedJob : job
-      ));
+      // Refresh jobs list to get the updated job from backend
+      await fetchCompanyData();
       setEditingJob(null);
       setJobForm({ 
         title: '', 
@@ -140,26 +160,67 @@ export default function CompanyDashboard() {
       try {
         setError('');
         await api.deleteJob(jobId);
-        setJobs(jobs.filter(job => job.id !== jobId));
-        // Update stats
-        setStats(prev => ({
-          ...prev,
-          activePositions: Math.max(0, prev.activePositions - 1),
-        }));
+        // Close applicants view if it was open for this job
+        if (selectedJobApplicants?.jobId === jobId || selectedJobApplicants?.jobId === jobId.toString()) {
+          setSelectedJobApplicants(null);
+        }
+        // Refresh jobs list to get updated data
+        await fetchCompanyData();
       } catch (err) {
         setError(err.message || 'Failed to delete job');
       }
     }
   };
 
-  const handleViewApplicants = (jobId) => {
-    // TODO: Navigate to applicants list for this job
-    console.log('View applicants for job:', jobId);
+  const handleViewApplicants = async (jobId) => {
+    try {
+      setLoadingApplicants(true);
+      setError('');
+      const data = await api.getJobApplicants(jobId);
+      
+      // Update applicant count for this job in the jobs list
+      setJobs(jobs.map(job => {
+        const currentJobId = job.id || job._id;
+        const requestedJobId = jobId?.toString() || jobId;
+        if (currentJobId?.toString() === requestedJobId && data.totalApplicants !== undefined) {
+          return { ...job, applicants: data.totalApplicants };
+        }
+        return job;
+      }));
+
+      setSelectedJobApplicants({
+        jobId,
+        jobTitle: data.job?.title || 'Unknown Job',
+        applicants: data.applicants || [],
+        totalApplicants: data.totalApplicants || 0,
+      });
+    } catch (err) {
+      console.error('Failed to load applicants:', err);
+      setError(err.message || 'Failed to load applicants');
+    } finally {
+      setLoadingApplicants(false);
+    }
   };
 
-  const handleViewReport = (candidateId) => {
-    // TODO: Navigate to candidate report
-    console.log('View report for candidate:', candidateId);
+  const handleViewReport = (interviewId) => {
+    // Navigate to report page - companies can now view applicant reports
+    window.open(`/report/${interviewId}`, '_blank');
+  };
+
+  const toggleJobDescription = (jobId) => {
+    const newExpanded = new Set(expandedJobs);
+    if (newExpanded.has(jobId)) {
+      newExpanded.delete(jobId);
+    } else {
+      newExpanded.add(jobId);
+    }
+    setExpandedJobs(newExpanded);
+  };
+
+  const truncateDescription = (description, maxLength = 150) => {
+    if (!description) return '';
+    if (description.length <= maxLength) return description;
+    return description.substring(0, maxLength).trim() + '...';
   };
 
   return (
@@ -319,36 +380,80 @@ export default function CompanyDashboard() {
               <p className="text-white">No jobs posted yet. Create your first job posting!</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {jobs.map((job) => (
-              <div key={job.id} className="p-4 bg-white rounded-md border border-white flex items-center justify-between">
-                <div className="flex-1">
-                  <h3 className="text-black font-semibold mb-1">{job.title}</h3>
-                  <p className="text-black text-sm mb-2">{job.description}</p>
-                  <p className="text-black text-xs">Applicants: {job.applicants || 0}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEditJob(job)}
-                    className="px-3 py-1 text-sm border border-black hover:border-gray-600 text-black hover:text-gray-600 rounded-md transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleViewApplicants(job.id)}
-                    className="px-3 py-1 text-sm bg-black hover:bg-gray-800 text-white rounded-md transition-colors"
-                  >
-                    View Applicants ({job.applicants || 0})
-                  </button>
-                  <button
-                    onClick={() => handleDeleteJob(job.id)}
-                    className="px-3 py-1 text-sm border border-black hover:border-gray-600 text-black hover:text-gray-600 rounded-md transition-colors"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-              ))}
+            <div className="space-y-4">
+              {jobs.map((job) => {
+                const jobId = job.id || job._id;
+                const isExpanded = expandedJobs.has(jobId);
+                const description = job.description || '';
+                const shouldTruncate = description.length > 150;
+                const displayDescription = shouldTruncate && !isExpanded 
+                  ? truncateDescription(description, 150)
+                  : description;
+
+                return (
+                  <div key={jobId} className="p-5 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold text-black">{job.title}</h3>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${
+                            job.status === 'active' ? 'bg-green-100 text-green-800' :
+                            job.status === 'closed' ? 'bg-gray-100 text-gray-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {job.status || 'active'}
+                          </span>
+                        </div>
+                        
+                        <div className="mb-3">
+                          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                            {displayDescription}
+                          </p>
+                          {shouldTruncate && (
+                            <button
+                              onClick={() => toggleJobDescription(jobId)}
+                              className="text-sm text-black hover:text-gray-600 font-medium mt-1 underline transition-colors"
+                            >
+                              {isExpanded ? 'See less' : 'See more'}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 mb-2">
+                          <span className="px-2 py-1 bg-gray-100 rounded">{job.level}</span>
+                          <span className="px-2 py-1 bg-gray-100 rounded">{job.location || 'Remote'}</span>
+                          <span className="px-2 py-1 bg-gray-100 rounded">{job.employmentType}</span>
+                          <span className="text-gray-500">
+                            {job.applicants || 0} {job.applicants === 1 ? 'applicant' : 'applicants'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleEditJob(job)}
+                          className="px-4 py-2 text-sm border border-gray-300 hover:border-black text-black hover:bg-gray-50 rounded-md transition-colors font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleViewApplicants(jobId)}
+                          disabled={loadingApplicants}
+                          className="px-4 py-2 text-sm bg-black hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md transition-colors font-medium"
+                        >
+                          {loadingApplicants ? 'Loading...' : 'Applicants'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteJob(jobId)}
+                          className="px-4 py-2 text-sm border border-red-300 hover:border-red-600 text-red-600 hover:bg-red-50 rounded-md transition-colors font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -393,40 +498,81 @@ export default function CompanyDashboard() {
           )}
         </div>
 
-        {/* Recent Candidates */}
-        <div className="bg-black rounded-lg shadow-xl p-6 border border-white">
-          <h2 className="text-xl font-semibold text-white mb-4">Recent Candidates</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white">
-                  <th className="text-left text-white font-medium py-3 px-4">Name</th>
-                  <th className="text-left text-white font-medium py-3 px-4">Position</th>
-                  <th className="text-left text-white font-medium py-3 px-4">Score</th>
-                  <th className="text-left text-white font-medium py-3 px-4">Date</th>
-                  <th className="text-left text-white font-medium py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentCandidates.map((candidate) => (
-                  <tr key={candidate.id} className="border-b border-white">
-                    <td className="text-white py-3 px-4">{candidate.name}</td>
-                    <td className="text-white py-3 px-4">{candidate.position}</td>
-                    <td className="text-white py-3 px-4">{candidate.score}%</td>
-                    <td className="text-white py-3 px-4">{candidate.date}</td>
-                    <td className="py-3 px-4">
-                      <button
-                        onClick={() => handleViewReport(candidate.id)}
-                        className="text-white hover:text-gray-300 text-sm underline"
-                      >
-                        View Report
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Applicants View */}
+        {selectedJobApplicants && (
+          <div className="bg-black rounded-lg shadow-xl p-6 border border-white mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-white">
+                  Applicants for: {selectedJobApplicants.jobTitle}
+                </h2>
+                <p className="text-white text-sm mt-1">
+                  Total: {selectedJobApplicants.totalApplicants} applicant(s)
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedJobApplicants(null)}
+                className="px-4 py-2 border border-white hover:border-gray-300 text-white hover:text-gray-300 font-medium rounded-md transition-colors"
+              >
+                Close
+              </button>
+            </div>
+            {selectedJobApplicants.applicants.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-white">No applicants yet for this job.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white">
+                      <th className="text-left text-white font-medium py-3 px-4">Candidate Email</th>
+                      <th className="text-left text-white font-medium py-3 px-4">Overall Score</th>
+                      <th className="text-left text-white font-medium py-3 px-4">Technical</th>
+                      <th className="text-left text-white font-medium py-3 px-4">Behavioral</th>
+                      <th className="text-left text-white font-medium py-3 px-4">Completed</th>
+                      <th className="text-left text-white font-medium py-3 px-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedJobApplicants.applicants.map((applicant) => (
+                      <tr key={applicant.interviewId} className="border-b border-white">
+                        <td className="text-white py-3 px-4">{applicant.candidateEmail}</td>
+                        <td className="text-white py-3 px-4">{applicant.overallScore || 'N/A'}%</td>
+                        <td className="text-white py-3 px-4">
+                          {applicant.technicalScore !== null ? `${applicant.technicalScore}%` : 'N/A'}
+                        </td>
+                        <td className="text-white py-3 px-4">
+                          {applicant.behavioralScore !== null ? `${applicant.behavioralScore}%` : 'N/A'}
+                        </td>
+                        <td className="text-white py-3 px-4">
+                          {applicant.completedAt 
+                            ? new Date(applicant.completedAt).toLocaleDateString()
+                            : 'N/A'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => handleViewReport(applicant.interviewId)}
+                            className="text-white hover:text-gray-300 text-sm underline"
+                          >
+                            View Report
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
+        )}
+
+        {/* Recent Candidates (Global view - optional, can be removed if not needed) */}
+        <div className="bg-black rounded-lg shadow-xl p-6 border border-white">
+          <h2 className="text-xl font-semibold text-white mb-4">All Candidates</h2>
+          <p className="text-white text-sm mb-4">
+            Click "View Applicants" on any job above to see candidates who applied to that position.
+          </p>
         </div>
       </main>
     </div>

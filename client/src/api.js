@@ -168,6 +168,13 @@ export const api = {
   getJob: (jobId) =>
     request(`/jobs/${jobId}`),
 
+  // Company-specific job endpoints
+  getMyJobs: () =>
+    request('/jobs/company/my-jobs'),
+
+  getJobApplicants: (jobId) =>
+    request(`/jobs/${jobId}/applicants`),
+
   // Users
   getMyStats: () =>
     request('/users/me/stats'),

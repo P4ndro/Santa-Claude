@@ -633,10 +633,21 @@ router.get('/:id/report', requireAuth, async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const interview = await Interview.findOne({
-      _id: id,
-      userId: req.user._id,
-    });
+    // Allow both the interview owner (userId) and the company (companyId) to view reports
+    let interview;
+    if (req.user.role === 'company') {
+      // Companies can view reports for interviews where they are the company
+      interview = await Interview.findOne({
+        _id: id,
+        companyId: req.user._id,
+      });
+    } else {
+      // Candidates can view their own interviews
+      interview = await Interview.findOne({
+        _id: id,
+        userId: req.user._id,
+      });
+    }
 
     if (!interview) {
       return res.status(404).json({ error: 'Interview not found' });
