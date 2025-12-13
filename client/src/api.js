@@ -70,10 +70,22 @@ async function request(endpoint, options = {}) {
     }
   }
 
-  const data = await response.json();
+  // Handle empty responses
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (!response.ok) {
+        throw new Error('Request failed');
+      }
+      return null;
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(data.error || 'Request failed');
+    throw new Error(data?.error || 'Request failed');
   }
 
   return data;
@@ -81,10 +93,11 @@ async function request(endpoint, options = {}) {
 
 // Auth API
 export const api = {
-  register: (email, password) =>
+  // Auth
+  register: (email, password, role = 'candidate', companyName = null) =>
     request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, role, companyName }),
     }),
 
   login: (email, password) =>
@@ -101,7 +114,78 @@ export const api = {
   me: () => request('/auth/me'),
 
   protected: () => request('/protected'),
+
+  // Jobs
+  listJobs: () => request('/jobs'),
+
+  getJob: (id) => request(`/jobs/${id}`),
+
+  // Interviews
+  startInterview: () =>
+    request('/interviews/start', { method: 'POST' }),
+
+  applyToJob: (jobId) =>
+    request(`/interviews/apply/${jobId}`, { method: 'POST' }),
+
+  getInterview: (id) =>
+    request(`/interviews/${id}`),
+
+  listInterviews: () =>
+    request('/interviews'),
+
+  submitAnswer: (interviewId, questionId, transcript, skipped = false) =>
+    request(`/interviews/${interviewId}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ questionId, transcript, skipped }),
+    }),
+
+  completeInterview: (id) =>
+    request(`/interviews/${id}/complete`, { method: 'POST' }),
+
+  getReport: (id) =>
+    request(`/interviews/${id}/report`),
+
+  // User Stats
+  getMyStats: () =>
+    request('/users/me/stats'),
+
+  // Company-specific APIs
+  listCompanyJobs: () =>
+    request('/jobs/company/my-jobs'),
+
+  createJob: (jobData) =>
+    request('/jobs', {
+      method: 'POST',
+      body: JSON.stringify(jobData),
+    }),
+
+  updateJob: (id, jobData) =>
+    request(`/jobs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(jobData),
+    }),
+
+  deleteJob: (id) =>
+    request(`/jobs/${id}`, { method: 'DELETE' }),
+
+  publishJob: (id) =>
+    request(`/jobs/${id}/publish`, { method: 'POST' }),
+
+  generateJobQuestions: (id) =>
+    request(`/jobs/${id}/generate-questions`, { method: 'POST' }),
+
+  getCompanyApplications: (jobId = null) => {
+    const url = jobId
+      ? `/interviews/company/applications?jobId=${jobId}`
+      : '/interviews/company/applications';
+    return request(url);
+  },
+
+  updateCompanyNotes: (interviewId, notes, status) =>
+    request(`/interviews/${interviewId}/company-notes`, {
+      method: 'PATCH',
+      body: JSON.stringify({ companyNotes: notes, companyStatus: status }),
+    }),
 };
 
 export default api;
-

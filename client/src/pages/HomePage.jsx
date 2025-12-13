@@ -1,53 +1,75 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../authContext';
 import Navbar from '../components/Navbar';
 import JobCard from '../components/JobCard';
 import { homePageStyles } from './homePageStyles';
+import { api } from '../api';
 
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [userRole] = useState(localStorage.getItem('userRole') || 'candidate');
   const [searchInput, setSearchInput] = useState('');
   const [activeNav, setActiveNav] = useState('dashboard');
+  
+  // API state
+  const [jobs, setJobs] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [startingInterview, setStartingInterview] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleUpgrade = () => {
-    alert('Redirecting to pricing...');
+  // Fetch jobs and stats from API
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [jobsData, statsData] = await Promise.all([
+          api.listJobs(),
+          api.getMyStats(),
+        ]);
+        setJobs(jobsData.jobs || []);
+        setStats(statsData);
+      } catch (err) {
+        console.error('Failed to load data:', err);
+      } finally {
+        setLoadingJobs(false);
+      }
+    }
+    
+    if (userRole === 'candidate') {
+      fetchData();
+    } else {
+      setLoadingJobs(false);
+    }
+  }, [userRole]);
+
+  const handleStartPractice = async () => {
+    try {
+      setStartingInterview(true);
+      setError('');
+      const data = await api.startInterview();
+      if (data && data.interviewId) {
+        navigate(`/interview/${data.interviewId}`);
+      } else {
+        throw new Error('Invalid response from server');
+      }
+    } catch (err) {
+      console.error('Failed to start interview:', err);
+      setError(err.message || 'Failed to start interview. Please try again.');
+      setStartingInterview(false);
+    }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('userRole');
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      localStorage.removeItem('userRole');
+      navigate('/');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
   };
-
-  // Mock job data - replace with actual API calls
-  const jobs = [
-    {
-      id: 1,
-      title: 'Software Engineer',
-      company: 'Tech Corp',
-      location: 'Remote',
-      type: 'Full-time',
-      posted: '2 days ago',
-    },
-    {
-      id: 2,
-      title: 'Frontend Developer',
-      company: 'StartupXYZ',
-      location: 'San Francisco, CA',
-      type: 'Full-time',
-      posted: '5 days ago',
-    },
-    {
-      id: 3,
-      title: 'Backend Engineer',
-      company: 'Cloud Services Inc',
-      location: 'New York, NY',
-      type: 'Contract',
-      posted: '1 week ago',
-    },
-  ];
 
   // Candidate View - Dashboard
   if (userRole === 'candidate') {
@@ -79,16 +101,18 @@ export default function HomePage() {
                 <i className="fas fa-th-large"></i>
                 <span>Dashboard</span>
               </a>
-              <Link
-                to="/interview"
+              <a
+                href="#"
                 className={`nav-link ${activeNav === 'interviews' ? 'active' : ''}`}
                 onClick={(e) => {
+                  e.preventDefault();
                   setActiveNav('interviews');
+                  handleStartPractice();
                 }}
               >
                 <i className="fas fa-briefcase"></i>
-                <span>Interviews</span>
-              </Link>
+                <span>{startingInterview ? 'Starting...' : 'Start Interview'}</span>
+              </a>
               <a
                 href=""
                 className={`nav-link ${activeNav === 'feedback' ? 'active' : ''}`}
@@ -166,6 +190,18 @@ export default function HomePage() {
               </div>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <div className="notification-card" style={{ marginBottom: '20px', background: '#fef2f2', border: '1px solid #fecaca' }}>
+                <div className="notification-content" style={{ color: '#dc2626' }}>
+                  <h4><i className="fas fa-exclamation-circle" style={{ marginRight: '8px' }}></i>{error}</h4>
+                </div>
+                <div className="notification-action" onClick={() => setError('')} style={{ cursor: 'pointer', color: '#dc2626' }}>
+                  <i className="fas fa-times"></i>
+                </div>
+              </div>
+            )}
+
             {/* Widget Grid */}
             <div className="widget-grid">
               {/* Card 1: AI Recruiter */}
@@ -180,8 +216,25 @@ export default function HomePage() {
                     <p>Simulate your interview!</p>
                   </div>
                 </div>
-                
-
+                <div className="progress-bar" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e5e7eb' }}>
+                  <button
+                    onClick={handleStartPractice}
+                    disabled={startingInterview}
+                    className="status-active"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      background: startingInterview ? '#9ca3af' : '#111827',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      cursor: startingInterview ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {startingInterview ? 'Starting...' : 'Start Practice Interview'}
+                  </button>
+                </div>
               </div>
 
               {/* Card 2: Performance */}
@@ -196,9 +249,60 @@ export default function HomePage() {
                     <p>Track your progress</p>
                   </div>
                 </div>
-                
-                
+                <div className="progress-bar" style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e5e7eb' }}>
+                  <Link 
+                    to="/report" 
+                    className="status-active"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '10px',
+                      background: '#f3f4f6',
+                      color: '#111827',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      textAlign: 'center',
+                      textDecoration: 'none'
+                    }}
+                  >
+                    View Reports
+                  </Link>
+                </div>
               </div>
+            </div>
+
+            {/* Jobs Section */}
+            <div className="calendar-section" style={{ marginTop: '30px' }}>
+              <div className="calendar-header">
+                <h2>Available Jobs</h2>
+                <div className="calendar-toggle">
+                  <i className="fas fa-briefcase"></i> {jobs.length} Jobs
+                </div>
+              </div>
+              
+              {loadingJobs ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                  <i className="fas fa-spinner fa-spin" style={{ fontSize: '24px', marginBottom: '10px' }}></i>
+                  <p>Loading jobs...</p>
+                </div>
+              ) : jobs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                  <i className="fas fa-briefcase" style={{ fontSize: '48px', marginBottom: '15px', opacity: 0.3 }}></i>
+                  <p>No jobs available at the moment</p>
+                </div>
+              ) : (
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
+                  gap: '20px',
+                  marginTop: '20px'
+                }}>
+                  {jobs.map((job) => (
+                    <JobCard key={job.id} job={job} />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Calendar Section */}
@@ -243,30 +347,30 @@ export default function HomePage() {
                     <i className="fas fa-microphone"></i>
                   </div>
                   <div className="performance-info">
-                    <h4>Mock Interview</h4>
-                    <p>Last Week</p>
+                    <h4>Completed Interviews</h4>
+                    <p>Total</p>
                   </div>
-                  <div className="performance-badge">85%</div>
+                  <div className="performance-badge">{stats?.completedInterviews || 0}</div>
                 </div>
                 <div className="performance-item">
                   <div className="performance-icon">
-                    <i className="fas fa-code"></i>
+                    <i className="fas fa-chart-line"></i>
                   </div>
                   <div className="performance-info">
-                    <h4>Technical Skills</h4>
-                    <p>Last Month</p>
+                    <h4>Average Score</h4>
+                    <p>All Interviews</p>
                   </div>
-                  <div className="performance-badge">90%</div>
+                  <div className="performance-badge">{stats?.averageScore ? `${stats.averageScore}%` : 'N/A'}</div>
                 </div>
                 <div className="performance-item">
                   <div className="performance-icon">
-                    <i className="fas fa-comments"></i>
+                    <i className="fas fa-clock"></i>
                   </div>
                   <div className="performance-info">
-                    <h4>Soft Skills</h4>
-                    <p>Last Month</p>
+                    <h4>Practice Time</h4>
+                    <p>Total</p>
                   </div>
-                  <div className="performance-badge">78%</div>
+                  <div className="performance-badge">{stats?.totalPracticeTime || '0m'}</div>
                 </div>
               </div>
             </div>

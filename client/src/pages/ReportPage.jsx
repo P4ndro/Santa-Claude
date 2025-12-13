@@ -1,113 +1,138 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../authContext';
+import { api } from '../api';
 import { homePageStyles } from './homePageStyles';
 
 export default function ReportPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { id: reportId } = useParams();
+  
   const [activeNav, setActiveNav] = useState('reports');
   const [searchInput, setSearchInput] = useState('');
   const [selectedReport, setSelectedReport] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Mock reports data - all generated reports
-  const [reports, setReports] = useState([
-    {
-      id: 1,
-      date: '2024-01-15',
-      company: 'TechCorp',
-      position: 'Software Engineer',
-      level: 'Senior',
-      overallScore: 85,
-      duration: '45 min',
-      status: 'completed',
-      failureModes: [
-        { mode: 'Filler Words', count: 12, severity: 'medium' },
-        { mode: 'Answer Length', issues: 'Good detail', severity: 'low' },
-        { mode: 'Structure', issues: 'Well organized', severity: 'low' },
-      ],
-      metrics: { answerLength: 180, fillerWords: 12, pauses: 8, structureScore: 8.5 },
-      strengths: ['Strong technical knowledge', 'Clear communication', 'Good examples'],
-      recommendations: ['Reduce filler words slightly', 'More eye contact'],
-    },
-    {
-      id: 2,
-      date: '2024-01-12',
-      company: 'InnovDesigns',
-      position: 'Frontend Developer',
-      level: 'Mid',
-      overallScore: 72,
-      duration: '38 min',
-      status: 'completed',
-      failureModes: [
-        { mode: 'Filler Words', count: 28, severity: 'high' },
-        { mode: 'Answer Length', issues: 'Too short', severity: 'medium' },
-        { mode: 'Pause Frequency', count: 18, severity: 'high' },
-      ],
-      metrics: { answerLength: 120, fillerWords: 28, pauses: 18, structureScore: 6.0 },
-      strengths: ['Good problem-solving', 'Technical accuracy'],
-      recommendations: ['Practice speaking fluently', 'Provide longer answers', 'Use STAR method'],
-    },
-    {
-      id: 3,
-      date: '2024-01-08',
-      company: 'MedGen',
-      position: 'Data Scientist',
-      level: 'Junior',
-      overallScore: 68,
-      duration: '42 min',
-      status: 'completed',
-      failureModes: [
-        { mode: 'Filler Words', count: 35, severity: 'high' },
-        { mode: 'Eye Contact', issues: 'Looking away frequently', severity: 'high' },
-        { mode: 'Structure', issues: 'Lacks organization', severity: 'medium' },
-      ],
-      metrics: { answerLength: 95, fillerWords: 35, pauses: 22, structureScore: 5.0 },
-      strengths: ['Enthusiasm', 'Willingness to learn'],
-      recommendations: ['Practice more mock interviews', 'Work on confidence', 'Structure answers better'],
-    },
-  ]);
-
-  // Check if coming from an interview - generate new report
+  // Fetch reports from API
   useEffect(() => {
-    const interviewSetup = sessionStorage.getItem('interviewSetup');
-    if (interviewSetup) {
-      const setup = JSON.parse(interviewSetup);
-      // Generate a new report based on the interview
-      const newReport = {
-        id: reports.length + 1,
-        date: new Date().toISOString().split('T')[0],
-        company: setup.company || 'Practice Interview',
-        position: setup.role || 'General',
-        level: setup.level || 'Mid',
-        overallScore: Math.floor(Math.random() * 30) + 65, // Random score 65-95
-        duration: `${setup.duration || 45} min`,
-        status: 'completed',
-        failureModes: [
-          { mode: 'Filler Words', count: Math.floor(Math.random() * 30) + 5, severity: Math.random() > 0.5 ? 'high' : 'medium' },
-          { mode: 'Answer Length', issues: Math.random() > 0.5 ? 'Good detail' : 'Could be longer', severity: Math.random() > 0.5 ? 'low' : 'medium' },
-          { mode: 'Structure', issues: Math.random() > 0.5 ? 'Well organized' : 'Needs improvement', severity: Math.random() > 0.5 ? 'low' : 'medium' },
-        ],
-        metrics: {
-          answerLength: Math.floor(Math.random() * 100) + 100,
-          fillerWords: Math.floor(Math.random() * 30) + 5,
-          pauses: Math.floor(Math.random() * 20) + 5,
-          structureScore: (Math.random() * 4 + 5).toFixed(1),
-        },
-        strengths: ['Technical knowledge demonstrated', 'Clear communication', 'Good engagement'],
-        recommendations: ['Continue practicing', 'Work on areas identified', 'Review failure modes'],
-      };
-      
-      setReports(prev => [newReport, ...prev]);
-      setSelectedReport(newReport);
-      sessionStorage.removeItem('interviewSetup');
-    } else {
-      // Select the most recent report by default
-      if (reports.length > 0) {
-        setSelectedReport(reports[0]);
+    async function fetchData() {
+      try {
+        setLoading(true);
+        
+        if (reportId) {
+          // Fetch specific report
+          const reportData = await api.getReport(reportId);
+          
+          // Transform API data to UI format
+          const formattedReport = formatReportForUI(reportData);
+          setSelectedReport(formattedReport);
+          setReports([formattedReport]);
+        } else {
+          // Fetch list of all interviews/reports
+          const interviewsData = await api.listInterviews();
+          const interviews = interviewsData.interviews || [];
+          
+          // Filter to only completed ones and format for UI
+          const formattedReports = interviews
+            .filter(i => i.status === 'completed')
+            .map((i, index) => formatInterviewListForUI(i, index));
+          
+          setReports(formattedReports);
+          if (formattedReports.length > 0) {
+            setSelectedReport(formattedReports[0]);
+          }
+        }
+      } catch (err) {
+        setError(err.message || 'Failed to load reports');
+      } finally {
+        setLoading(false);
       }
     }
-  }, []);
+    
+    fetchData();
+  }, [reportId]);
+
+  // Format single report from API
+  function formatReportForUI(data) {
+    const report = data.report || {};
+    return {
+      id: data.interviewId,
+      date: data.createdAt ? new Date(data.createdAt).toISOString().split('T')[0] : 'N/A',
+      company: data.companyName || 'Practice Interview',
+      position: data.jobTitle || 'General',
+      level: 'Mid', // Could be extracted from job details
+      overallScore: report.overallScore || 0,
+      technicalScore: report.technicalScore || null,
+      behavioralScore: report.behavioralScore || null,
+      readinessBand: report.readinessBand || 'N/A',
+      duration: data.completedAt && data.createdAt 
+        ? `${Math.round((new Date(data.completedAt) - new Date(data.createdAt)) / 60000)} min`
+        : 'N/A',
+      status: data.status || 'completed',
+      failureModes: (report.primaryBlockers || []).map(b => ({
+        mode: b.questionType === 'technical' ? 'Technical Gap' : 'Behavioral Gap',
+        issues: b.issue,
+        severity: b.severity || 'medium'
+      })),
+      metrics: {
+        answerLength: report.metrics?.averageAnswerLength || 0,
+        questionsAnswered: report.metrics?.questionsAnswered || 0,
+        questionsSkipped: report.metrics?.questionsSkipped || 0,
+        totalQuestions: report.metrics?.totalQuestions || 0
+      },
+      strengths: report.strengths || ['Participated in interview'],
+      recommendations: report.recommendations || ['Keep practicing'],
+      primaryBlockers: report.primaryBlockers || []
+    };
+  }
+
+  // Format interview list item for UI
+  function formatInterviewListForUI(interview, index) {
+    return {
+      id: interview.interviewId,
+      date: interview.createdAt ? new Date(interview.createdAt).toISOString().split('T')[0] : 'N/A',
+      company: interview.companyName || 'Practice Interview',
+      position: interview.jobTitle || 'General',
+      level: 'Mid',
+      overallScore: interview.overallScore || 0,
+      technicalScore: interview.technicalScore || null,
+      behavioralScore: interview.behavioralScore || null,
+      readinessBand: interview.readinessBand || 'N/A',
+      duration: interview.durationMinutes ? `${interview.durationMinutes} min` : 'N/A',
+      status: interview.status || 'completed',
+      failureModes: [],
+      metrics: {
+        answerLength: 0,
+        questionsAnswered: interview.answersCount || 0,
+        questionsSkipped: 0,
+        totalQuestions: interview.questionsCount || 0
+      },
+      strengths: [],
+      recommendations: []
+    };
+  }
+
+  const handleSelectReport = async (report) => {
+    // If we don't have full details, fetch them
+    if (report.failureModes.length === 0 && report.strengths.length === 0) {
+      try {
+        const fullReport = await api.getReport(report.id);
+        const formatted = formatReportForUI(fullReport);
+        setSelectedReport(formatted);
+        
+        // Update in list too
+        setReports(prev => prev.map(r => r.id === report.id ? formatted : r));
+      } catch (err) {
+        console.error('Failed to load report details:', err);
+        setSelectedReport(report);
+      }
+    } else {
+      setSelectedReport(report);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('userRole');
@@ -128,6 +153,86 @@ export default function ReportPage() {
       default: return { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280' };
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading reports...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            onClick={() => navigate('/home')}
+            className="px-6 py-3 bg-black text-white rounded-full font-medium hover:bg-gray-800 transition-colors"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (reports.length === 0) {
+    return (
+      <>
+        <style>{homePageStyles}</style>
+        <div className="dashboard-container">
+          <aside className="sidebar-left">
+            <div className="profile-header">
+              <div className="profile-avatar">
+                <i className="fas fa-user"></i>
+              </div>
+              <div className="profile-info">
+                <h3>InterviewSim</h3>
+                <p>{user?.email || 'user@example.com'}</p>
+              </div>
+            </div>
+            <nav className="nav-links">
+              <Link to="/home" className="nav-link"><i className="fas fa-th-large"></i><span>Dashboard</span></Link>
+              <Link to="/interview" className="nav-link"><i className="fas fa-briefcase"></i><span>Interviews</span></Link>
+              <a href="#" className="nav-link active"><i className="fas fa-file-alt"></i><span>Reports</span></a>
+            </nav>
+            <div className="nav-footer">
+              <Link to="/profile" className="nav-link"><i className="fas fa-cog"></i><span>Settings</span></Link>
+              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); handleLogout(); }}>
+                <i className="fas fa-sign-out-alt"></i><span>Log out</span>
+              </a>
+            </div>
+          </aside>
+          <main className="main-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <i className="fas fa-file-alt" style={{ fontSize: '48px', color: '#d1d5db', marginBottom: '20px' }}></i>
+              <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#111827', marginBottom: '10px' }}>No Reports Yet</h2>
+              <p style={{ color: '#6b7280', marginBottom: '20px' }}>Complete an interview to see your report here.</p>
+              <button
+                onClick={() => navigate('/interview')}
+                style={{ 
+                  padding: '12px 24px', 
+                  background: '#111827', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '25px', 
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Start Practice Interview
+              </button>
+            </div>
+          </main>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -221,7 +326,7 @@ export default function ReportPage() {
                 <div
                   key={report.id}
                   className="widget-card"
-                  onClick={() => setSelectedReport(report)}
+                  onClick={() => handleSelectReport(report)}
                   style={{ 
                     cursor: 'pointer',
                     border: selectedReport?.id === report.id ? '2px solid #111827' : '1px solid #e5e7eb'
@@ -253,7 +358,7 @@ export default function ReportPage() {
                         background: '#f3f4f6',
                         color: '#6b7280'
                       }}>
-                        {report.level}
+                        {report.readinessBand}
                       </span>
                       <span style={{
                         padding: '3px 10px',
@@ -302,68 +407,78 @@ export default function ReportPage() {
                   </div>
                   <div style={{ fontSize: '13px', color: '#6b7280' }}>Overall Score</div>
                 </div>
+                {selectedReport.technicalScore !== null && (
+                  <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: '700', color: getScoreColor(selectedReport.technicalScore) }}>
+                      {selectedReport.technicalScore}%
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#6b7280' }}>Technical</div>
+                  </div>
+                )}
+                {selectedReport.behavioralScore !== null && (
+                  <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: '700', color: getScoreColor(selectedReport.behavioralScore) }}>
+                      {selectedReport.behavioralScore}%
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#6b7280' }}>Behavioral</div>
+                  </div>
+                )}
                 <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '28px', fontWeight: '700', color: '#111827' }}>
-                    {selectedReport.metrics.answerLength}
+                    {selectedReport.metrics.questionsAnswered}/{selectedReport.metrics.totalQuestions}
                   </div>
-                  <div style={{ fontSize: '13px', color: '#6b7280' }}>Avg. Words/Answer</div>
-                </div>
-                <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '10px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '28px', fontWeight: '700', color: selectedReport.metrics.fillerWords > 20 ? '#ef4444' : '#111827' }}>
-                    {selectedReport.metrics.fillerWords}
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#6b7280' }}>Filler Words</div>
-                </div>
-                <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '10px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '28px', fontWeight: '700', color: '#111827' }}>
-                    {selectedReport.metrics.structureScore}/10
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#6b7280' }}>Structure Score</div>
+                  <div style={{ fontSize: '13px', color: '#6b7280' }}>Answered</div>
                 </div>
               </div>
 
-              {/* Failure Modes */}
-              <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#111827', marginBottom: '15px' }}>
-                <i className="fas fa-exclamation-triangle" style={{ marginRight: '8px', color: '#ca8a04' }}></i>
-                Failure Modes Detected
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '25px' }}>
-                {selectedReport.failureModes.map((mode, index) => {
-                  const colors = getSeverityColor(mode.severity);
-                  return (
-                    <div
-                      key={index}
-                      style={{
-                        padding: '15px 20px',
-                        background: colors.bg,
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}
-                    >
-                      <div>
-                        <h4 style={{ fontWeight: '600', color: '#111827', marginBottom: '3px' }}>{mode.mode}</h4>
-                        <p style={{ fontSize: '13px', color: '#6b7280' }}>
-                          {mode.count ? `Count: ${mode.count}` : mode.issues}
-                        </p>
-                      </div>
-                      <span style={{
-                        padding: '5px 12px',
-                        borderRadius: '20px',
-                        fontSize: '11px',
-                        fontWeight: '600',
-                        textTransform: 'uppercase',
-                        background: 'white',
-                        color: colors.text
-                      }}>
-                        {mode.severity}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              {/* Primary Blockers */}
+              {selectedReport.primaryBlockers && selectedReport.primaryBlockers.length > 0 && (
+                <>
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#111827', marginBottom: '15px' }}>
+                    <i className="fas fa-exclamation-triangle" style={{ marginRight: '8px', color: '#ca8a04' }}></i>
+                    Primary Blockers
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '25px' }}>
+                    {selectedReport.primaryBlockers.map((blocker, index) => {
+                      const colors = getSeverityColor(blocker.severity);
+                      return (
+                        <div
+                          key={index}
+                          style={{
+                            padding: '15px 20px',
+                            background: colors.bg,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}
+                        >
+                          <div>
+                            <h4 style={{ fontWeight: '600', color: '#111827', marginBottom: '3px' }}>
+                              {blocker.questionText?.substring(0, 60)}...
+                            </h4>
+                            <p style={{ fontSize: '13px', color: '#6b7280' }}>
+                              {blocker.issue}
+                            </p>
+                          </div>
+                          <span style={{
+                            padding: '5px 12px',
+                            borderRadius: '20px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            textTransform: 'uppercase',
+                            background: 'white',
+                            color: colors.text
+                          }}>
+                            {blocker.severity}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
 
               {/* Strengths & Recommendations */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
@@ -428,7 +543,9 @@ export default function ReportPage() {
               flexDirection: 'column'
             }}>
               <div style={{ fontSize: '42px', fontWeight: '700', color: 'white' }}>
-                {Math.round(reports.reduce((acc, r) => acc + r.overallScore, 0) / reports.length)}%
+                {reports.length > 0 
+                  ? Math.round(reports.reduce((acc, r) => acc + r.overallScore, 0) / reports.length)
+                  : 0}%
               </div>
               <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Average Score</div>
             </div>
@@ -441,49 +558,10 @@ export default function ReportPage() {
                 </div>
                 <div className="detail-row">
                   <span>Best Score:</span>
-                  <span className="status-active">{Math.max(...reports.map(r => r.overallScore))}%</span>
+                  <span className="status-active">
+                    {reports.length > 0 ? Math.max(...reports.map(r => r.overallScore)) : 0}%
+                  </span>
                 </div>
-                <div className="detail-row">
-                  <span>This Month:</span>
-                  <span>{reports.filter(r => new Date(r.date).getMonth() === new Date().getMonth()).length}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Common Issues */}
-          <div className="sidebar-section">
-            <h3>Top Issues to Address</h3>
-            <div className="performance-list">
-              <div className="performance-item">
-                <div className="performance-icon" style={{ background: '#fef2f2', color: '#ef4444' }}>
-                  <i className="fas fa-comment"></i>
-                </div>
-                <div className="performance-info">
-                  <h4>Filler Words</h4>
-                  <p>Most common issue</p>
-                </div>
-                <div className="performance-badge" style={{ background: '#ef4444' }}>High</div>
-              </div>
-              <div className="performance-item">
-                <div className="performance-icon" style={{ background: '#fefce8', color: '#ca8a04' }}>
-                  <i className="fas fa-align-left"></i>
-                </div>
-                <div className="performance-info">
-                  <h4>Answer Length</h4>
-                  <p>Could be improved</p>
-                </div>
-                <div className="performance-badge" style={{ background: '#ca8a04' }}>Med</div>
-              </div>
-              <div className="performance-item">
-                <div className="performance-icon" style={{ background: '#f0fdf4', color: '#16a34a' }}>
-                  <i className="fas fa-sitemap"></i>
-                </div>
-                <div className="performance-info">
-                  <h4>Structure</h4>
-                  <p>Generally good</p>
-                </div>
-                <div className="performance-badge" style={{ background: '#16a34a' }}>Low</div>
               </div>
             </div>
           </div>
@@ -500,13 +578,13 @@ export default function ReportPage() {
                 <i className="fas fa-play"></i>
               </div>
             </div>
-            <div className="notification-card" style={{ cursor: 'pointer' }}>
+            <div className="notification-card" style={{ cursor: 'pointer', marginBottom: '10px' }} onClick={() => navigate('/home')}>
               <div className="notification-content">
-                <h4>Share Report</h4>
-                <p>Export or share results</p>
+                <h4>Back to Dashboard</h4>
+                <p>View available jobs</p>
               </div>
               <div className="notification-action">
-                <i className="fas fa-share"></i>
+                <i className="fas fa-home"></i>
               </div>
             </div>
           </div>

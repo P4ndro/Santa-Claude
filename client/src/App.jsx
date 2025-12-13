@@ -74,7 +74,23 @@ export default function App() {
         }
       />
       <Route
+        path="/interview/:id"
+        element={
+          <ProtectedRoute>
+            <InterviewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/report"
+        element={
+          <ProtectedRoute>
+            <ReportPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/report/:id"
         element={
           <ProtectedRoute>
             <ReportPage />
@@ -100,4 +116,3 @@ export default function App() {
     </Routes>
   );
 }
-

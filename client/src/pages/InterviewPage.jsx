@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { api } from '../api';
 
 // Reusable PillButton component
 const PillButton = ({ label, selected, onClick, disabled = false }) => (
@@ -52,8 +53,19 @@ const SelectionSection = ({ title, children }) => (
 
 export default function InterviewPage() {
   const navigate = useNavigate();
+  const { id: interviewId } = useParams();  // Get interview ID from URL if present
   
-  // Interview setup state
+  // Loading states for API mode
+  const [loading, setLoading] = useState(!!interviewId);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Interview data from API (for application mode)
+  const [interviewData, setInterviewData] = useState(null);
+  const [jobTitle, setJobTitle] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  
+  // Interview setup state (for practice mode without ID)
   const [setupState, setSetupState] = useState({
     company: '',
     level: '',
@@ -68,14 +80,15 @@ export default function InterviewPage() {
   
   // Interview session state
   const [interviewStarted, setInterviewStarted] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
+  const [questions, setQuestions] = useState([]);
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [answer, setAnswer] = useState('');
+  const [answers, setAnswers] = useState({});
   const [videoEnabled, setVideoEnabled] = useState(true);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Data options
+  // Data options for practice mode
   const companies = ['TechCorp', 'InnovDesigns', 'MedGen', 'StartupX', 'DataFlow', 'CloudNine'];
   const levels = ['Junior', 'Mid', 'Senior'];
   const roles = ['Software Engineer', 'Product Manager', 'Data Scientist', 'UX Designer', 'DevOps Engineer'];
@@ -89,19 +102,68 @@ export default function InterviewPage() {
     s.toLowerCase().includes(skillSearch.toLowerCase())
   );
 
-  // Calculate dynamic duration
+  // Fetch interview data from API if we have an ID
   useEffect(() => {
-    let duration = 45; // base duration
-    duration += setupState.skills.length * 10; // +10 min per skill
-    if (setupState.level === 'Senior') duration += 5; // +5 for senior
-    if (setupState.level === 'Mid') duration += 2; // +2 for mid
-    setSetupState(prev => ({ ...prev, duration }));
-  }, [setupState.skills, setupState.level]);
+    async function fetchInterview() {
+      if (!interviewId) return;
+      
+      try {
+        setLoading(true);
+        const data = await api.getInterview(interviewId);
+        
+        if (data.status === 'completed') {
+          navigate(`/report/${interviewId}`, { replace: true });
+          return;
+        }
+        
+        setInterviewData(data);
+        setQuestions(data.questions || []);
+        setQuestionIndex(data.currentQuestionIndex || 0);
+        setJobTitle(data.jobTitle || '');
+        setCompanyName(data.companyName || '');
+        
+        // Restore existing answers
+        const existingAnswers = {};
+        (data.answers || []).forEach(a => {
+          existingAnswers[a.questionId] = a.transcript;
+        });
+        setAnswers(existingAnswers);
+        
+        // Auto-start interview when we have data from API
+        setInterviewStarted(true);
+      } catch (err) {
+        setError(err.message || 'Failed to load interview');
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchInterview();
+  }, [interviewId, navigate]);
 
-  // Check if form is valid
+  // Calculate dynamic duration for practice mode
+  useEffect(() => {
+    if (interviewId) return; // Skip for API mode
+    
+    let duration = 45;
+    duration += setupState.skills.length * 10;
+    if (setupState.level === 'Senior') duration += 5;
+    if (setupState.level === 'Mid') duration += 2;
+    setSetupState(prev => ({ ...prev, duration }));
+  }, [setupState.skills, setupState.level, interviewId]);
+
+  // Load saved answer when question changes
+  useEffect(() => {
+    if (questions[questionIndex]) {
+      const questionId = questions[questionIndex].id;
+      setAnswer(answers[questionId] || '');
+    }
+  }, [questionIndex, questions, answers]);
+
+  // Check if form is valid (practice mode)
   const isFormValid = setupState.company && setupState.level && setupState.role;
 
-  // Selection handlers
+  // Selection handlers for practice mode
   const handleCompanySelect = (company) => {
     setSetupState(prev => ({ ...prev, company }));
   };
@@ -125,25 +187,26 @@ export default function InterviewPage() {
     });
   };
 
-  // Mock AI questions based on setup
-  const generateQuestions = () => {
+  // Generate mock questions for practice mode
+  const generatePracticeQuestions = () => {
     const baseQuestions = [
-      `Tell me about yourself and why you're interested in ${setupState.company}.`,
-      `What makes you a good fit for a ${setupState.level} ${setupState.role} position?`,
-      `Describe a challenging project you worked on.`,
-      `How do you handle tight deadlines and pressure?`,
-      `Where do you see yourself in 5 years?`,
+      { id: 'p1', text: `Tell me about yourself and why you're interested in ${setupState.company}.`, type: 'behavioral' },
+      { id: 'p2', text: `What makes you a good fit for a ${setupState.level} ${setupState.role} position?`, type: 'behavioral' },
+      { id: 'p3', text: `Describe a challenging project you worked on.`, type: 'technical' },
+      { id: 'p4', text: `How do you handle tight deadlines and pressure?`, type: 'behavioral' },
+      { id: 'p5', text: `Where do you see yourself in 5 years?`, type: 'behavioral' },
     ];
     
-    // Add skill-specific questions
-    setupState.skills.forEach(skill => {
-      baseQuestions.push(`Can you tell me about your experience with ${skill}?`);
+    setupState.skills.forEach((skill, idx) => {
+      baseQuestions.push({
+        id: `s${idx}`,
+        text: `Can you tell me about your experience with ${skill}?`,
+        type: 'technical'
+      });
     });
     
     return baseQuestions;
   };
-
-  const questions = generateQuestions();
 
   // Initialize webcam
   useEffect(() => {
@@ -169,21 +232,62 @@ export default function InterviewPage() {
     };
   }, [interviewStarted, videoEnabled]);
 
-  const handleStartInterview = () => {
-    if (isFormValid) {
-      // Store setup in session for later use
+  const handleStartInterview = async () => {
+    if (!interviewId && isFormValid) {
+      // Practice mode - generate questions locally
+      const practiceQuestions = generatePracticeQuestions();
+      setQuestions(practiceQuestions);
       sessionStorage.setItem('interviewSetup', JSON.stringify(setupState));
       setInterviewStarted(true);
-      setCurrentQuestion(questions[0]);
       setQuestionIndex(0);
     }
   };
 
-  const handleNextQuestion = () => {
+  const handleSubmitAnswer = async (skipped = false) => {
+    const currentQuestion = questions[questionIndex];
+    if (!currentQuestion) return;
+    
+    // Save answer locally
+    if (!skipped) {
+      setAnswers(prev => ({
+        ...prev,
+        [currentQuestion.id]: answer,
+      }));
+    }
+    
+    // If we have an interview ID, submit to API
+    if (interviewId) {
+      try {
+        setSubmitting(true);
+        setError('');
+        
+        const result = await api.submitAnswer(
+          interviewId,
+          currentQuestion.id,
+          skipped ? '' : answer,
+          skipped
+        );
+        
+        // Auto-complete: if backend says completed, go to report
+        if (result.completed) {
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+          }
+          navigate(`/report/${interviewId}`);
+          return;
+        }
+      } catch (err) {
+        setError(err.message || 'Failed to submit answer');
+        setSubmitting(false);
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
+    
+    // Move to next question
     if (questionIndex < questions.length - 1) {
-      const nextIndex = questionIndex + 1;
-      setQuestionIndex(nextIndex);
-      setCurrentQuestion(questions[nextIndex]);
+      setQuestionIndex(questionIndex + 1);
       setAnswer('');
     } else {
       handleEndInterview();
@@ -191,19 +295,50 @@ export default function InterviewPage() {
   };
 
   const handleSkipQuestion = () => {
-    handleNextQuestion();
+    handleSubmitAnswer(true);
   };
 
-  const handleSubmitAnswer = async () => {
-    console.log('Answer submitted:', answer);
-    handleNextQuestion();
+  const handleNextQuestion = () => {
+    if (questionIndex < questions.length - 1) {
+      if (answer.trim()) {
+        setAnswers(prev => ({
+          ...prev,
+          [questions[questionIndex].id]: answer,
+        }));
+      }
+      setQuestionIndex(questionIndex + 1);
+    }
   };
 
-  const handleEndInterview = () => {
+  const handlePrevQuestion = () => {
+    if (questionIndex > 0) {
+      if (answer.trim()) {
+        setAnswers(prev => ({
+          ...prev,
+          [questions[questionIndex].id]: answer,
+        }));
+      }
+      setQuestionIndex(questionIndex - 1);
+    }
+  };
+
+  const handleEndInterview = async () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
     }
-    navigate('/report');
+    
+    if (interviewId) {
+      try {
+        await api.completeInterview(interviewId);
+        navigate(`/report/${interviewId}`);
+      } catch (err) {
+        console.error('Failed to complete:', err);
+        navigate(`/report/${interviewId}`);
+      }
+    } else {
+      // Practice mode - just go to home
+      navigate('/home');
+    }
   };
 
   const toggleVideo = () => {
@@ -216,8 +351,39 @@ export default function InterviewPage() {
     }
   };
 
-  // Setup Page (before interview starts)
-  if (!interviewStarted) {
+  const currentQuestion = questions[questionIndex];
+
+  // Loading state (API mode)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading interview...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state (API mode)
+  if (error && !interviewStarted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            onClick={() => navigate('/home')}
+            className="px-6 py-3 bg-black text-white rounded-full font-medium hover:bg-gray-800 transition-colors"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Setup Page (practice mode - no interview ID)
+  if (!interviewStarted && !interviewId) {
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Navbar */}
@@ -235,15 +401,12 @@ export default function InterviewPage() {
 
         {/* Main Content */}
         <main className="max-w-3xl mx-auto px-6 py-12">
-          {/* Header */}
           <div className="text-center mb-10">
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Setup Your Interview</h1>
             <p className="text-gray-500">Configure your mock interview session</p>
           </div>
 
-          {/* Selection Sections */}
           <div className="space-y-6">
-            {/* Company Selection */}
             <SelectionSection title="Select Company">
               <SearchInput 
                 placeholder="Search Company" 
@@ -262,7 +425,6 @@ export default function InterviewPage() {
               </div>
             </SelectionSection>
 
-            {/* Level Selection */}
             <SelectionSection title="Select Level">
               <div className="flex flex-wrap gap-3">
                 {levels.map(level => (
@@ -277,7 +439,6 @@ export default function InterviewPage() {
               <p className="text-sm text-gray-400 mt-3">* Required — Level affects question difficulty</p>
             </SelectionSection>
 
-            {/* Job Role Selection */}
             <SelectionSection title="Select Job Role">
               <div className="flex flex-wrap gap-3">
                 {roles.map(role => (
@@ -291,7 +452,6 @@ export default function InterviewPage() {
               </div>
             </SelectionSection>
 
-            {/* Skills Selection (Multi-select) */}
             <SelectionSection title={`Select Skills (${setupState.skills.length}/5 selected)`}>
               <SearchInput 
                 placeholder="Search Skill Focus" 
@@ -312,7 +472,6 @@ export default function InterviewPage() {
               <p className="text-sm text-gray-400 mt-3">Select up to 5 skills to focus on</p>
             </SelectionSection>
 
-            {/* Estimated Duration */}
             <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
@@ -325,7 +484,6 @@ export default function InterviewPage() {
               </div>
             </div>
 
-            {/* Start Interview Button */}
             <div className="flex justify-center pt-4">
               <button
                 onClick={handleStartInterview}
@@ -342,7 +500,6 @@ export default function InterviewPage() {
               </button>
             </div>
 
-            {/* Validation Message */}
             {!isFormValid && (
               <p className="text-center text-sm text-gray-400">
                 Please select Company, Level, and Job Role to continue
@@ -350,25 +507,11 @@ export default function InterviewPage() {
             )}
           </div>
         </main>
-
-        {/* Footer */}
-        <footer className="border-t border-gray-200 mt-16">
-          <div className="max-w-6xl mx-auto px-6 py-6">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <p className="text-gray-400 text-sm">© 2024 InterviewAI. All rights reserved.</p>
-              <div className="flex items-center gap-6">
-                <a href="#" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">Privacy Policy</a>
-                <a href="#" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">Terms of Service</a>
-                <a href="#" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">Contact Us</a>
-              </div>
-            </div>
-          </div>
-        </footer>
       </div>
     );
   }
 
-  // Interview Session Page (after interview starts)
+  // Interview Session Page
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navbar */}
@@ -379,11 +522,15 @@ export default function InterviewPage() {
           </Link>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-500">
-              {setupState.company} • {setupState.level} {setupState.role}
+              {interviewId 
+                ? `${companyName || 'Company'} • ${jobTitle || 'Interview'}`
+                : `${setupState.company} • ${setupState.level} ${setupState.role}`
+              }
             </span>
             <button
               onClick={handleEndInterview}
-              className="px-4 py-2 text-red-500 hover:text-red-600 font-medium transition-colors"
+              disabled={submitting}
+              className="px-4 py-2 text-red-500 hover:text-red-600 font-medium transition-colors disabled:opacity-50"
             >
               End Interview
             </button>
@@ -393,6 +540,12 @@ export default function InterviewPage() {
 
       {/* Interview Content */}
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Webcam Video Panel */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -444,9 +597,16 @@ export default function InterviewPage() {
                 <h2 className="text-lg font-semibold text-gray-900">
                   Question {questionIndex + 1} of {questions.length}
                 </h2>
-                <span className="text-xs font-medium text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
-                  AI Generated
-                </span>
+                {currentQuestion?.type && (
+                  <span className={`text-xs font-medium px-3 py-1 rounded-full
+                    ${currentQuestion.type === 'technical' 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'bg-green-100 text-green-700'
+                    }`}
+                  >
+                    {currentQuestion.type}
+                  </span>
+                )}
               </div>
               
               {/* Progress bar */}
@@ -458,7 +618,7 @@ export default function InterviewPage() {
               </div>
               
               <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
-                <p className="text-gray-900 text-lg leading-relaxed">{currentQuestion}</p>
+                <p className="text-gray-900 text-lg leading-relaxed">{currentQuestion?.text}</p>
               </div>
             </div>
 
@@ -467,60 +627,64 @@ export default function InterviewPage() {
               <textarea
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
+                disabled={submitting}
                 rows={6}
                 className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 
-                  focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none transition-all duration-200"
+                  focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none transition-all duration-200
+                  disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Type your answer here..."
               />
             </div>
 
             <div className="flex gap-3">
               <button
-                onClick={handleSubmitAnswer}
-                disabled={!answer.trim()}
+                onClick={() => handleSubmitAnswer(false)}
+                disabled={!answer.trim() || submitting}
                 className={`flex-1 px-6 py-3 rounded-full font-medium transition-all duration-200
-                  ${answer.trim() 
+                  ${answer.trim() && !submitting
                     ? 'bg-black text-white hover:bg-gray-800' 
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
               >
-                Submit Answer
+                {submitting ? 'Submitting...' : 'Submit Answer'}
               </button>
               <button
                 onClick={handleSkipQuestion}
-                className="px-6 py-3 border border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300 font-medium rounded-full transition-all duration-200"
+                disabled={submitting}
+                className="px-6 py-3 border border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300 font-medium rounded-full transition-all duration-200 disabled:opacity-50"
               >
                 Skip
               </button>
+            </div>
+
+            {/* Navigation */}
+            <div className="flex gap-3 mt-3">
               <button
-                onClick={handleNextQuestion}
-                disabled={questionIndex >= questions.length - 1}
-                className={`px-6 py-3 border border-gray-200 font-medium rounded-full transition-all duration-200
-                  ${questionIndex < questions.length - 1 
+                onClick={handlePrevQuestion}
+                disabled={questionIndex === 0 || submitting}
+                className={`flex-1 px-6 py-3 border border-gray-200 font-medium rounded-full transition-all duration-200
+                  ${questionIndex > 0 && !submitting
                     ? 'text-gray-600 hover:text-gray-900 hover:border-gray-300' 
                     : 'text-gray-300 cursor-not-allowed'
                   }`}
               >
-                Next
+                ← Previous
+              </button>
+              <button
+                onClick={handleNextQuestion}
+                disabled={questionIndex >= questions.length - 1 || submitting}
+                className={`flex-1 px-6 py-3 border border-gray-200 font-medium rounded-full transition-all duration-200
+                  ${questionIndex < questions.length - 1 && !submitting
+                    ? 'text-gray-600 hover:text-gray-900 hover:border-gray-300' 
+                    : 'text-gray-300 cursor-not-allowed'
+                  }`}
+              >
+                Next →
               </button>
             </div>
           </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-200 mt-auto">
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-gray-400 text-sm">© 2024 InterviewAI. All rights reserved.</p>
-            <div className="flex items-center gap-6">
-              <a href="#" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">Privacy Policy</a>
-              <a href="#" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">Terms of Service</a>
-              <a href="#" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">Contact Us</a>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
