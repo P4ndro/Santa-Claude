@@ -34,6 +34,50 @@ const jobSchema = new mongoose.Schema({
     enum: ['draft', 'active', 'closed'],
     default: 'active',
   },
+  // AI-generated questions (stored after job creation)
+  generatedQuestions: [{
+    id: String,
+    text: String,
+    type: {
+      type: String,
+      enum: ['technical', 'behavioral'],
+    },
+    category: String, // e.g., 'algorithms', 'system-design', 'communication'
+    difficulty: {
+      type: String,
+      enum: ['easy', 'medium', 'hard'],
+    },
+    weight: {
+      type: Number,
+      default: 1,
+    },
+    generatedAt: Date,
+  }],
+  // Question generation config (for AI)
+  questionConfig: {
+    numQuestions: {
+      type: Number,
+      default: 5,
+    },
+    technicalRatio: {
+      type: Number,
+      default: 0.6, // 60% technical, 40% behavioral
+    },
+    difficulty: {
+      type: String,
+      enum: ['easy', 'medium', 'hard', 'mixed'],
+      default: 'mixed',
+    },
+  },
+  // AI generation status
+  aiGeneration: {
+    questionsGenerated: {
+      type: Boolean,
+      default: false,
+    },
+    generatedAt: Date,
+    model: String, // Which AI model was used
+  },
   createdAt: {
     type: Date,
     default: Date.now,
