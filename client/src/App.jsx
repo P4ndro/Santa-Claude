@@ -34,7 +34,53 @@ function PublicRoute({ children }) {
     );
   }
 
-  return isAuthenticated ? <Navigate to="/home" replace /> : children;
+  if (isAuthenticated) {
+    // Redirect companies to their dashboard, candidates to home
+    if (user?.role === 'company') {
+      return <Navigate to="/company-dashboard" replace />;
+    }
+    return <Navigate to="/home" replace />;
+  }
+
+  return children;
+}
+
+// Guard to redirect companies away from home page
+function HomePageGuard({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-black">Loading...</div>
+      </div>
+    );
+  }
+
+  if (user?.role === 'company') {
+    return <Navigate to="/company-dashboard" replace />;
+  }
+
+  return children;
+}
+
+// Guard to redirect companies away from interview pages
+function InterviewPageGuard({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-black">Loading...</div>
+      </div>
+    );
+  }
+
+  if (user?.role === 'company') {
+    return <Navigate to="/company-dashboard" replace />;
+  }
+
+  return children;
 }
 
 export default function App() {
@@ -61,7 +107,9 @@ export default function App() {
         path="/home"
         element={
           <ProtectedRoute>
-            <HomePage />
+            <HomePageGuard>
+              <HomePage />
+            </HomePageGuard>
           </ProtectedRoute>
         }
       />
@@ -69,7 +117,9 @@ export default function App() {
         path="/interview/:id"
         element={
           <ProtectedRoute>
-            <InterviewPage />
+            <InterviewPageGuard>
+              <InterviewPage />
+            </InterviewPageGuard>
           </ProtectedRoute>
         }
       />

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../authContext';
 import Navbar from '../components/Navbar';
 import ReportCard from '../components/ReportCard';
 import { api } from '../api';
@@ -7,6 +8,8 @@ import { api } from '../api';
 export default function ReportPage() {
   const { id: interviewId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isCompany = user?.role === 'company';
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,10 +67,10 @@ export default function ReportPage() {
           <div className="bg-black rounded-lg shadow-xl p-8 border border-white text-center">
             <p className="text-white mb-4">{error}</p>
             <button
-              onClick={() => navigate('/home')}
+              onClick={() => navigate(isCompany ? '/company-dashboard' : '/home')}
               className="px-6 py-2 bg-white hover:bg-gray-200 text-black font-medium rounded-lg transition-colors"
             >
-              Back to Home
+              Back to {isCompany ? 'Dashboard' : 'Home'}
             </button>
           </div>
         </main>
@@ -95,10 +98,10 @@ export default function ReportPage() {
             </p>
           </div>
           <Link
-            to="/home"
+            to={isCompany ? "/company-dashboard" : "/home"}
             className="px-4 py-2 border border-black hover:border-gray-600 text-black hover:text-gray-600 font-medium rounded-md transition-colors"
           >
-            ← Back to Home
+            ← Back to {isCompany ? 'Dashboard' : 'Home'}
           </Link>
         </div>
 

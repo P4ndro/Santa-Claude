@@ -10,12 +10,18 @@ export default function HomePage() {
   const navigate = useNavigate();
   const userRole = user?.role || 'candidate';
 
-  // Redirect company users to company dashboard
+  // Immediately redirect company users to company dashboard
   useEffect(() => {
     if (user?.role === 'company') {
       navigate('/company-dashboard', { replace: true });
+      return;
     }
   }, [user?.role, navigate]);
+
+  // Don't render anything for companies (they should be redirected)
+  if (user?.role === 'company') {
+    return null;
+  }
   const [startingInterview, setStartingInterview] = useState(false);
   const [error, setError] = useState('');
   const [jobs, setJobs] = useState([]);
