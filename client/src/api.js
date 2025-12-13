@@ -92,13 +92,24 @@ async function request(endpoint, options = {}) {
   return data;
 }
 
-// Auth API
+// API Methods
 export const api = {
-  // Auth
+  // ============================================
+  // AUTH
+  // ============================================
+  
+  // Register as candidate (default)
   register: (email, password) =>
     request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, role: 'candidate' }),
+    }),
+
+  // Register as company
+  registerCompany: (email, password, companyName) =>
+    request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, role: 'company', companyName }),
     }),
 
   login: (email, password) =>
@@ -116,9 +127,17 @@ export const api = {
 
   protected: () => request('/protected'),
 
-  // Interviews
+  // ============================================
+  // CANDIDATE - INTERVIEWS
+  // ============================================
+  
+  // Start a practice interview (no job)
   startInterview: () =>
     request('/interviews/start', { method: 'POST' }),
+
+  // Apply to a job (start application interview)
+  applyToJob: (jobId) =>
+    request(`/interviews/apply/${jobId}`, { method: 'POST' }),
 
   getInterview: (interviewId) =>
     request(`/interviews/${interviewId}`),
@@ -138,16 +157,92 @@ export const api = {
   listInterviews: () =>
     request('/interviews'),
 
-  // Jobs
+  // ============================================
+  // CANDIDATE - JOBS (browse)
+  // ============================================
+  
   listJobs: () =>
     request('/jobs'),
 
   getJob: (jobId) =>
     request(`/jobs/${jobId}`),
 
-  // User stats
+  // ============================================
+  // CANDIDATE - USER STATS
+  // ============================================
+  
   getMyStats: () =>
     request('/users/me/stats'),
+
+  // ============================================
+  // COMPANY - JOBS MANAGEMENT
+  // ============================================
+  
+  // List company's own jobs
+  listMyJobs: () =>
+    request('/jobs/company/my-jobs'),
+
+  // Create a new job
+  createJob: (title, rawDescription, options = {}) =>
+    request('/jobs', {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        rawDescription,
+        location: options.location,
+        locationType: options.locationType,
+        employmentType: options.employmentType,
+        department: options.department,
+        questionConfig: options.questionConfig,
+      }),
+    }),
+
+  // Update a job
+  updateJob: (jobId, updates) =>
+    request(`/jobs/${jobId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+
+  // Delete a job
+  deleteJob: (jobId) =>
+    request(`/jobs/${jobId}`, { method: 'DELETE' }),
+
+  // Generate AI questions for a job
+  generateJobQuestions: (jobId) =>
+    request(`/jobs/${jobId}/generate-questions`, { method: 'POST' }),
+
+  // Publish a job
+  publishJob: (jobId) =>
+    request(`/jobs/${jobId}/publish`, { method: 'POST' }),
+
+  // Get questions for a job
+  getJobQuestions: (jobId) =>
+    request(`/jobs/${jobId}/questions`),
+
+  // ============================================
+  // COMPANY - APPLICANTS
+  // ============================================
+  
+  // Get all applications for company's jobs
+  getApplications: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.jobId) params.append('jobId', filters.jobId);
+    if (filters.status) params.append('status', filters.status);
+    const query = params.toString();
+    return request(`/interviews/company/applications${query ? `?${query}` : ''}`);
+  },
+
+  // Get applicants for a specific job
+  getJobApplicants: (jobId) =>
+    request(`/jobs/company/${jobId}/applicants`),
+
+  // Add notes/rating to an application
+  updateApplicationNotes: (interviewId, notes, rating) =>
+    request(`/interviews/${interviewId}/company-notes`, {
+      method: 'PATCH',
+      body: JSON.stringify({ notes, rating }),
+    }),
 };
 
 export default api;

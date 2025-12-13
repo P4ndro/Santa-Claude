@@ -31,10 +31,33 @@ function setRefreshCookie(res, token) {
   });
 }
 
+// Helper to format user response based on role
+function formatUserResponse(user) {
+  const base = {
+    id: user._id,
+    email: user.email,
+    role: user.role,
+    profile: user.profile,
+    createdAt: user.createdAt,
+  };
+
+  if (user.role === 'company') {
+    return {
+      ...base,
+      companyProfile: user.companyProfile,
+    };
+  } else {
+    return {
+      ...base,
+      candidateProfile: user.candidateProfile,
+    };
+  }
+}
+
 // POST /api/auth/register
 router.post('/register', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role, companyName } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -44,16 +67,35 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
+    // Validate role
+    const validRoles = ['candidate', 'company'];
+    const userRole = validRoles.includes(role) ? role : 'candidate';
+
+    // Company registration requires company name
+    if (userRole === 'company' && !companyName) {
+      return res.status(400).json({ error: 'Company name is required for company accounts' });
+    }
+
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
-    const user = new User({
+    // Build user object
+    const userData = {
       email: email.toLowerCase(),
       passwordHash: password, // Will be hashed by pre-save hook
-    });
+      role: userRole,
+    };
 
+    // Add company-specific data
+    if (userRole === 'company') {
+      userData.companyProfile = {
+        companyName: companyName.trim(),
+      };
+    }
+
+    const user = new User(userData);
     await user.save();
 
     const { accessToken, refreshToken } = generateTokens(user._id);
@@ -61,7 +103,7 @@ router.post('/register', async (req, res, next) => {
 
     res.status(201).json({
       accessToken,
-      user: { id: user._id, email: user.email },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     next(error);
@@ -92,7 +134,7 @@ router.post('/login', async (req, res, next) => {
 
     res.json({
       accessToken,
-      user: { id: user._id, email: user.email },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     next(error);
@@ -130,7 +172,7 @@ router.post('/refresh', async (req, res, next) => {
 
     res.json({
       accessToken: tokens.accessToken,
-      user: { id: user._id, email: user.email },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     res.clearCookie('refreshToken');
@@ -144,9 +186,8 @@ router.post('/refresh', async (req, res, next) => {
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
   res.json({
-    user: { id: req.user._id, email: req.user.email },
+    user: formatUserResponse(req.user),
   });
 });
 
 export default router;
-

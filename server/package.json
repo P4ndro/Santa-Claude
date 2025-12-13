@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "seed": "node seeds/practiceJobs.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

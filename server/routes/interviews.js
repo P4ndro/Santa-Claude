@@ -1,27 +1,34 @@
 import { Router } from 'express';
 import { Interview } from '../models/Interview.js';
+import { Job } from '../models/Job.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-// Mock questions for MVP - replace with AI-generated questions later
-const MOCK_QUESTIONS = [
+// Default practice questions (used when no job is specified)
+const PRACTICE_QUESTIONS = [
   {
     id: 'q1',
     text: 'Tell me about yourself and your experience.',
     type: 'behavioral',
+    category: 'introduction',
+    difficulty: 'easy',
     weight: 1,
   },
   {
     id: 'q2',
     text: 'Describe a challenging technical problem you solved recently.',
     type: 'technical',
+    category: 'problem_solving',
+    difficulty: 'medium',
     weight: 2,
   },
   {
     id: 'q3',
     text: 'How do you handle disagreements with team members?',
     type: 'behavioral',
+    category: 'teamwork',
+    difficulty: 'medium',
     weight: 1,
   },
 ];
@@ -31,10 +38,8 @@ function generateMockReport(interview) {
   const answers = interview.answers || [];
   const questions = interview.questions || [];
   
-  // Calculate total possible weight
   const totalWeight = questions.reduce((sum, q) => sum + (q.weight || 1), 0);
   
-  // Score each question based on answer quality and weight
   let weightedScore = 0;
   let technicalScore = 0;
   let behavioralScore = 0;
@@ -48,25 +53,21 @@ function generateMockReport(interview) {
     const weight = question.weight || 1;
     const isTechnical = question.type === 'technical';
     
-    // Track weights by type
     if (isTechnical) {
       technicalWeight += weight;
     } else {
       behavioralWeight += weight;
     }
     
-    // Calculate question score (0-100)
     let questionScore = 0;
     let issue = null;
     let severity = null;
     
     if (!answer) {
-      // Not answered at all
       questionScore = 0;
       issue = 'Question was not answered';
       severity = isTechnical ? 'high' : 'medium';
     } else if (answer.skipped) {
-      // Skipped
       questionScore = 0;
       issue = 'Question was skipped';
       severity = isTechnical ? 'high' : 'medium';
@@ -84,22 +85,19 @@ function generateMockReport(interview) {
       } else if (wordCount < 60) {
         questionScore = 75;
       } else {
-        questionScore = 95; // Good detailed answer
+        questionScore = 95;
       }
     }
     
-    // Add weighted score
     const weightedQuestionScore = (questionScore / 100) * weight;
     weightedScore += weightedQuestionScore;
     
-    // Track by type
     if (isTechnical) {
       technicalScore += weightedQuestionScore;
     } else {
       behavioralScore += weightedQuestionScore;
     }
     
-    // Add blocker if there's an issue
     if (issue) {
       primaryBlockers.push({
         questionId: question.id,
@@ -112,7 +110,6 @@ function generateMockReport(interview) {
     }
   });
   
-  // Calculate percentages
   const overallScore = Math.round((weightedScore / totalWeight) * 100);
   const technicalPercent = technicalWeight > 0 
     ? Math.round((technicalScore / technicalWeight) * 100) 
@@ -121,11 +118,9 @@ function generateMockReport(interview) {
     ? Math.round((behavioralScore / behavioralWeight) * 100) 
     : null;
   
-  // Sort blockers by severity (high first)
   const severityOrder = { high: 0, medium: 1, low: 2 };
   primaryBlockers.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
   
-  // Calculate metrics
   const questionsAnswered = answers.filter(a => !a.skipped && a.transcript.trim()).length;
   const questionsSkipped = answers.filter(a => a.skipped).length;
   const answeredTranscripts = answers.filter(a => !a.skipped && a.transcript.trim());
@@ -136,12 +131,17 @@ function generateMockReport(interview) {
     ? Math.round(totalWords / answeredTranscripts.length) 
     : 0;
 
-  // Generate contextual strengths and recommendations
+  // Determine readiness band
+  let readinessBand = 'Not Ready';
+  if (overallScore >= 85) readinessBand = 'Ready';
+  else if (overallScore >= 70) readinessBand = 'Almost Ready';
+  else if (overallScore >= 50) readinessBand = 'Needs Work';
+
+  // Generate contextual feedback
   const strengths = [];
   const areasForImprovement = [];
   const recommendations = [];
 
-  // Strengths
   if (technicalPercent !== null && technicalPercent >= 70) {
     strengths.push('Strong technical communication');
   }
@@ -155,7 +155,6 @@ function generateMockReport(interview) {
     strengths.push('Provided detailed, thorough responses');
   }
 
-  // Areas for improvement based on type scores
   if (technicalPercent !== null && technicalPercent < 60) {
     areasForImprovement.push('Technical question responses need more depth');
     recommendations.push('Practice explaining technical concepts with specific examples');
@@ -173,16 +172,6 @@ function generateMockReport(interview) {
     recommendations.push('Aim for 50+ words per answer with concrete examples');
   }
 
-  // Contextual insight
-  if (technicalPercent !== null && behavioralPercent !== null) {
-    if (behavioralPercent > technicalPercent + 20) {
-      recommendations.push('You did well behaviorally, but technical depth is holding back your readiness');
-    } else if (technicalPercent > behavioralPercent + 20) {
-      recommendations.push('Strong technical skills - focus on storytelling for behavioral questions');
-    }
-  }
-
-  // Ensure at least one item in each array
   if (strengths.length === 0) {
     strengths.push('Showed willingness to practice and improve');
   }
@@ -197,6 +186,7 @@ function generateMockReport(interview) {
     overallScore,
     technicalScore: technicalPercent,
     behavioralScore: behavioralPercent,
+    readinessBand,
     primaryBlockers,
     strengths,
     areasForImprovement,
@@ -207,16 +197,26 @@ function generateMockReport(interview) {
       questionsSkipped,
       totalQuestions: questions.length,
     },
+    generatedAt: new Date(),
   };
 }
 
-// POST /api/interviews/start - Start a new interview
+// ============================================
+// CANDIDATE ENDPOINTS
+// ============================================
+
+// POST /api/interviews/start - Start a practice interview (no job)
 router.post('/start', requireAuth, async (req, res, next) => {
   try {
+    if (req.user.role !== 'candidate') {
+      return res.status(403).json({ error: 'Only candidates can start interviews' });
+    }
+
     const interview = new Interview({
       userId: req.user._id,
+      interviewType: 'practice',
       status: 'in_progress',
-      questions: MOCK_QUESTIONS,
+      questions: PRACTICE_QUESTIONS,
       answers: [],
       currentQuestionIndex: 0,
     });
@@ -225,7 +225,93 @@ router.post('/start', requireAuth, async (req, res, next) => {
 
     res.status(201).json({
       interviewId: interview._id,
+      interviewType: 'practice',
       questions: interview.questions,
+      currentQuestionIndex: 0,
+      totalQuestions: interview.questions.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/interviews/apply/:jobId - Start an application interview for a job
+router.post('/apply/:jobId', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'candidate') {
+      return res.status(403).json({ error: 'Only candidates can apply to jobs' });
+    }
+
+    const job = await Job.findById(req.params.jobId);
+    
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (job.status !== 'active') {
+      return res.status(400).json({ error: 'This job is not accepting applications' });
+    }
+
+    // Get all questions (generated + custom)
+    const allJobQuestions = [...(job.generatedQuestions || []), ...(job.customQuestions || [])];
+    
+    if (allJobQuestions.length === 0) {
+      return res.status(400).json({ error: 'Job interview questions not ready' });
+    }
+
+    // Check if user already has an in-progress or completed application for this job
+    const existingApplication = await Interview.findOne({
+      userId: req.user._id,
+      jobId: job._id,
+      status: { $in: ['in_progress', 'completed'] },
+    });
+
+    if (existingApplication) {
+      return res.status(400).json({ 
+        error: 'You have already applied to this job',
+        existingInterviewId: existingApplication._id,
+        status: existingApplication.status,
+      });
+    }
+
+    // Create application interview with job's questions
+    const interview = new Interview({
+      userId: req.user._id,
+      interviewType: 'application',
+      jobId: job._id,
+      companyId: job.companyId,
+      status: 'in_progress',
+      questions: allJobQuestions.map(q => ({
+        id: q.id,
+        text: q.text,
+        type: q.type,
+        category: q.category,
+        difficulty: q.difficulty,
+        weight: q.weight,
+      })),
+      answers: [],
+      currentQuestionIndex: 0,
+    });
+
+    await interview.save();
+
+    // Update job stats
+    await Job.findByIdAndUpdate(job._id, {
+      $inc: { 'stats.totalApplications': 1 },
+    });
+
+    res.status(201).json({
+      interviewId: interview._id,
+      interviewType: 'application',
+      jobTitle: job.title,
+      companyName: job.companyId?.companyProfile?.companyName || 'Unknown',
+      questions: interview.questions.map(q => ({
+        id: q.id,
+        text: q.text,
+        type: q.type,
+        category: q.category,
+        difficulty: q.difficulty,
+      })),
       currentQuestionIndex: 0,
       totalQuestions: interview.questions.length,
     });
@@ -253,7 +339,6 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Interview already completed' });
     }
 
-    // Check if answer already exists for this question
     const existingAnswerIndex = interview.answers.findIndex(
       a => a.questionId === questionId
     );
@@ -266,14 +351,11 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
     };
 
     if (existingAnswerIndex >= 0) {
-      // Update existing answer
       interview.answers[existingAnswerIndex] = answerData;
     } else {
-      // Add new answer
       interview.answers.push(answerData);
     }
 
-    // Update current question index
     const questionIndex = interview.questions.findIndex(q => q.id === questionId);
     if (questionIndex >= 0 && questionIndex >= interview.currentQuestionIndex) {
       interview.currentQuestionIndex = Math.min(
@@ -282,18 +364,32 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
       );
     }
 
-    // Check if all questions answered
     const allAnswered = interview.questions.every(q =>
       interview.answers.some(a => a.questionId === q.id)
     );
 
-    // Auto-complete if all questions answered
     let completed = false;
     if (allAnswered && interview.status !== 'completed') {
       interview.report = generateMockReport(interview);
       interview.status = 'completed';
       interview.completedAt = new Date();
       completed = true;
+
+      // Update job stats if this is an application
+      if (interview.interviewType === 'application' && interview.jobId) {
+        const updateData = { $inc: { 'stats.completedInterviews': 1 } };
+        
+        // Update average score
+        const job = await Job.findById(interview.jobId);
+        if (job) {
+          const currentTotal = (job.stats?.averageScore || 0) * (job.stats?.completedInterviews || 0);
+          const newCount = (job.stats?.completedInterviews || 0) + 1;
+          const newAverage = Math.round((currentTotal + interview.report.overallScore) / newCount);
+          updateData.$set = { 'stats.averageScore': newAverage };
+        }
+        
+        await Job.findByIdAndUpdate(interview.jobId, updateData);
+      }
     }
 
     await interview.save();
@@ -303,7 +399,7 @@ router.post('/:id/answer', requireAuth, async (req, res, next) => {
       answersCount: interview.answers.length,
       totalQuestions: interview.questions.length,
       allAnswered,
-      completed, // Frontend can use this to navigate to report
+      completed,
       currentQuestionIndex: interview.currentQuestionIndex,
     });
   } catch (error) {
@@ -329,12 +425,18 @@ router.post('/:id/complete', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Interview already completed' });
     }
 
-    // Generate mock report
     interview.report = generateMockReport(interview);
     interview.status = 'completed';
     interview.completedAt = new Date();
 
     await interview.save();
+
+    // Update job stats if application
+    if (interview.interviewType === 'application' && interview.jobId) {
+      await Job.findByIdAndUpdate(interview.jobId, {
+        $inc: { 'stats.completedInterviews': 1 },
+      });
+    }
 
     res.json({
       success: true,
@@ -351,23 +453,40 @@ router.get('/:id/report', requireAuth, async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const interview = await Interview.findOne({
-      _id: id,
-      userId: req.user._id,
-    });
+    // Allow both candidate (owner) and company (for applications) to view
+    const interview = await Interview.findById(id)
+      .populate('jobId', 'title')
+      .populate('companyId', 'companyProfile.companyName');
 
     if (!interview) {
       return res.status(404).json({ error: 'Interview not found' });
     }
 
-    // If not completed, generate report on-the-fly but don't save
+    // Check access: owner or company for their job applications
+    const isOwner = interview.userId.equals(req.user._id);
+    const isCompany = interview.companyId && interview.companyId._id.equals(req.user._id);
+
+    if (!isOwner && !isCompany) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     let report = interview.report;
     if (!report || !report.overallScore) {
       report = generateMockReport(interview);
     }
 
+    // Mark as viewed by company
+    if (isCompany && !interview.companyViewed) {
+      interview.companyViewed = true;
+      interview.companyViewedAt = new Date();
+      await interview.save();
+    }
+
     res.json({
       interviewId: interview._id,
+      interviewType: interview.interviewType,
+      jobTitle: interview.jobId?.title || null,
+      companyName: interview.companyId?.companyProfile?.companyName || null,
       status: interview.status,
       report,
       questions: interview.questions,
@@ -388,7 +507,7 @@ router.get('/:id', requireAuth, async (req, res, next) => {
     const interview = await Interview.findOne({
       _id: id,
       userId: req.user._id,
-    });
+    }).populate('jobId', 'title').populate('companyId', 'companyProfile.companyName');
 
     if (!interview) {
       return res.status(404).json({ error: 'Interview not found' });
@@ -396,8 +515,17 @@ router.get('/:id', requireAuth, async (req, res, next) => {
 
     res.json({
       interviewId: interview._id,
+      interviewType: interview.interviewType,
+      jobTitle: interview.jobId?.title || null,
+      companyName: interview.companyId?.companyProfile?.companyName || null,
       status: interview.status,
-      questions: interview.questions,
+      questions: interview.questions.map(q => ({
+        id: q.id,
+        text: q.text,
+        type: q.type,
+        category: q.category,
+        difficulty: q.difficulty,
+      })),
       answers: interview.answers,
       currentQuestionIndex: interview.currentQuestionIndex,
       totalQuestions: interview.questions.length,
@@ -409,40 +537,32 @@ router.get('/:id', requireAuth, async (req, res, next) => {
   }
 });
 
-// GET /api/interviews - List user's interviews (ready-to-render for Home UI)
+// GET /api/interviews - List user's interviews
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const interviews = await Interview.find({ userId: req.user._id })
+      .populate('jobId', 'title')
+      .populate('companyId', 'companyProfile.companyName')
       .sort({ createdAt: -1 })
-      .select('status questions answers createdAt completedAt report')
       .limit(20);
 
     const interviewList = interviews.map(interview => {
       const report = interview.report || {};
       
-      // Calculate readiness band based on score
-      let readinessBand = null;
-      if (report.overallScore !== undefined) {
-        if (report.overallScore >= 85) readinessBand = 'Ready';
-        else if (report.overallScore >= 70) readinessBand = 'Almost Ready';
-        else if (report.overallScore >= 50) readinessBand = 'Needs Work';
-        else readinessBand = 'Not Ready';
-      }
-
       return {
         interviewId: interview._id,
+        interviewType: interview.interviewType,
+        jobTitle: interview.jobId?.title || null,
+        companyName: interview.companyId?.companyProfile?.companyName || null,
         status: interview.status,
         questionsCount: interview.questions.length,
         answersCount: interview.answers.length,
-        // Scores
         overallScore: report.overallScore || null,
         technicalScore: report.technicalScore || null,
         behavioralScore: report.behavioralScore || null,
-        readinessBand,
-        // Dates (ready for display)
+        readinessBand: report.readinessBand || null,
         createdAt: interview.createdAt,
         completedAt: interview.completedAt,
-        // Duration in minutes (if completed)
         durationMinutes: interview.completedAt && interview.createdAt
           ? Math.round((new Date(interview.completedAt) - new Date(interview.createdAt)) / 60000)
           : null,
@@ -455,5 +575,92 @@ router.get('/', requireAuth, async (req, res, next) => {
   }
 });
 
-export default router;
+// ============================================
+// COMPANY ENDPOINTS (view applicant interviews)
+// ============================================
 
+// GET /api/interviews/company/applications - Get all applications for company's jobs
+router.get('/company/applications', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'company') {
+      return res.status(403).json({ error: 'Only company accounts can access this' });
+    }
+
+    const { jobId, status } = req.query;
+
+    const query = {
+      companyId: req.user._id,
+      interviewType: 'application',
+    };
+
+    if (jobId) query.jobId = jobId;
+    if (status) query.status = status;
+
+    const interviews = await Interview.find(query)
+      .populate('userId', 'email profile.name candidateProfile')
+      .populate('jobId', 'title')
+      .sort({ completedAt: -1, createdAt: -1 })
+      .limit(100);
+
+    const applications = interviews.map(interview => ({
+      interviewId: interview._id,
+      candidate: {
+        id: interview.userId._id,
+        email: interview.userId.email,
+        name: interview.userId.profile?.name || interview.userId.email.split('@')[0],
+        skills: interview.userId.candidateProfile?.skills || [],
+      },
+      jobTitle: interview.jobId?.title || 'Unknown Job',
+      status: interview.status,
+      overallScore: interview.report?.overallScore || null,
+      technicalScore: interview.report?.technicalScore || null,
+      behavioralScore: interview.report?.behavioralScore || null,
+      readinessBand: interview.report?.readinessBand || null,
+      companyViewed: interview.companyViewed,
+      companyRating: interview.companyRating,
+      createdAt: interview.createdAt,
+      completedAt: interview.completedAt,
+    }));
+
+    res.json({ applications });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/interviews/:id/company-notes - Add company notes/rating
+router.patch('/:id/company-notes', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'company') {
+      return res.status(403).json({ error: 'Only company accounts can add notes' });
+    }
+
+    const interview = await Interview.findOne({
+      _id: req.params.id,
+      companyId: req.user._id,
+    });
+
+    if (!interview) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+
+    const { notes, rating } = req.body;
+
+    if (notes !== undefined) interview.companyNotes = notes;
+    if (rating !== undefined && rating >= 1 && rating <= 5) {
+      interview.companyRating = rating;
+    }
+
+    await interview.save();
+
+    res.json({
+      success: true,
+      companyNotes: interview.companyNotes,
+      companyRating: interview.companyRating,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default router;
