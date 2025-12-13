@@ -1,262 +1,262 @@
-# MERN Authentication Scaffold
+# Santa Claude 🎅
 
-A full-stack MERN (MongoDB, Express, React, Node.js) scaffold with JWT authentication and a provider-agnostic AI interface layer.
+An AI-powered mock interview platform that helps candidates prepare for job interviews and produces explainable interview reports.
 
-## Features
+## Vision
 
-- **Authentication**: Email/password with JWT (access + refresh tokens)
-- **Secure Cookies**: Refresh tokens stored in HttpOnly cookies
-- **React Frontend**: Vite + React Router + Tailwind CSS
-- **AI Ready**: Provider-agnostic LLM interface layer
-- **No Vendor Lock-in**: Safe to push to GitHub, no proprietary dependencies
+Santa Claude is a productivity tool designed to:
+- **For Candidates**: Practice realistic job interviews and receive constructive feedback
+- **For Companies** (future): Pre-screen applicants before human interviews
+
+Current focus: **Candidate-side MVP**
+
+---
+
+## Core User Flow
+
+```
+Landing Page → Register/Login → Home → Start Interview → Interview Room → Report → Home
+                                                ↑                              ↓
+                                                └──── View Past Reports ←──────┘
+```
+
+1. User lands on the site
+2. User registers or logs in (JWT auth)
+3. User is redirected to Home
+4. User starts a mock interview
+5. User enters Interview Room
+6. User answers questions (text input)
+7. Interview completes
+8. User sees a Report
+9. User returns to Home and can revisit past reports
+
+---
+
+## What is an "Interview"?
+
+An interview is a stored session consisting of:
+
+| Component | Description |
+|-----------|-------------|
+| Questions | Predefined set of questions with types and weights |
+| Answers | User responses stored as text transcripts |
+| Evaluation | Analysis of answer quality |
+| Report | Final feedback with actionable insights |
+
+**Interview Types:**
+- **Practice interviews** — Private, for self-improvement
+- **Application interviews** — (Future) Shared with companies
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React + Vite + Tailwind CSS |
+| Backend | Node.js + Express |
+| Database | MongoDB + Mongoose |
+| Auth | JWT (access + refresh tokens) |
+| AI | Provider-agnostic abstraction layer |
+
+---
 
 ## Project Structure
 
 ```
-/client          # React frontend (Vite)
-  /src
-    /pages       # AuthPage, Dashboard
-    App.jsx      # Routing + auth guards
-    api.js       # API client with token refresh
-    authContext.jsx  # Auth state management
-/server          # Node.js + Express backend
-  /ai            # AI interface layer
-    llmClient.js # Provider-agnostic LLM client
-  /config        # Database configuration
-  /middleware    # Auth middleware, error handler
-  /models        # Mongoose models
-  /routes        # API routes
-  index.js       # Server entry point
+/
+├── client/                 # React frontend
+│   └── src/
+│       ├── pages/          # Landing, Auth, Home, Interview, Report, Profile
+│       ├── api.js          # API client
+│       └── authContext.jsx # Auth state
+│
+├── server/                 # Express backend
+│   ├── ai/                 # AI abstraction layer
+│   ├── models/             # User, Interview models
+│   ├── routes/             # API routes
+│   └── middleware/         # Auth, error handling
+│
+└── docs/                   # Documentation
+    └── api-contract.md     # API specification
 ```
+
+---
 
 ## Quick Start
 
 ### Prerequisites
-
 - Node.js 18+
-- MongoDB (local or MongoDB Atlas)
+- MongoDB (local or Atlas)
 
-### 1. Clone & Install
+### Install
 
 ```bash
-# Install all dependencies (root + server + client)
 npm install
 npm run install:all
 ```
 
-### 2. Configure Environment Variables
+### Configure Environment
 
-Copy `server/ENV_EXAMPLE.txt` to `server/.env`:
-
+Create `server/.env`:
 ```env
-# MongoDB connection string
-MONGODB_URI=mongodb://localhost:27017/mern-auth
-
-# JWT secrets (use strong random strings in production!)
-JWT_ACCESS_SECRET=your-access-token-secret-change-this
-JWT_REFRESH_SECRET=your-refresh-token-secret-change-this
-
-# Frontend origin for CORS
+MONGODB_URL=your-mongodb-connection-string
+JWT_ACCESS_SECRET=your-access-secret
+JWT_REFRESH_SECRET=your-refresh-secret
 CLIENT_ORIGIN=http://localhost:5173
-
-# Server port
 PORT=3000
-
-# Node environment
-NODE_ENV=development
+USE_MOCK_AI=true
 ```
 
-Copy `client/ENV_EXAMPLE.txt` to `client/.env`:
-
+Create `client/.env`:
 ```env
 VITE_API_BASE_URL=http://localhost:3000/api
 ```
 
-### 3. Start Development Servers
+### Run
 
 ```bash
-# Run both server and client with one command
-npm run dev
+npm run dev    # Runs both server (:3000) and client (:5173)
 ```
 
-Or run separately in two terminals:
-```bash
-npm run server   # Backend on :3000
-npm run client   # Frontend on :5173
-```
+Open http://localhost:5173
 
-The app will be available at:
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3000
+---
 
-## API Endpoints
+## Interview Evaluation Philosophy
 
-### Authentication
+### Weighted Scoring
+- **Technical/coding questions** → Higher weight
+- **Behavioral questions** → Lower weight
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | Login user |
-| POST | `/api/auth/logout` | Logout user |
-| POST | `/api/auth/refresh` | Refresh access token |
-| GET | `/api/auth/me` | Get current user (protected) |
+### Report Language
+The AI acts as a **coach**, not a hiring authority:
 
-### Protected
+✅ "What held your readiness back..."  
+❌ "You failed..." or "Rejected"
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/protected` | Test protected route |
+### Primary Blockers
+Reports identify specific questions that most negatively affected readiness, with constructive guidance.
 
-### Health
+---
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Server health check |
+## AI Integration
 
-## Authentication Flow
-
-### Token Strategy
-
-1. **Access Token** (15 min expiry)
-   - Returned in JSON response
-   - Stored in memory (not localStorage)
-   - Sent via `Authorization: Bearer <token>` header
-
-2. **Refresh Token** (7 day expiry)
-   - Stored in HttpOnly cookie
-   - Automatically sent with requests
-   - Used to obtain new access tokens
-
-### Flow Diagram
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  LOGIN/REGISTER                                              │
-│  POST /api/auth/login                                        │
-│  ↓                                                           │
-│  Response: { accessToken, user }                             │
-│  + Set-Cookie: refreshToken (HttpOnly)                       │
-└─────────────────────────────────────────────────────────────┘
-         ↓
-┌─────────────────────────────────────────────────────────────┐
-│  PROTECTED REQUESTS                                          │
-│  Authorization: Bearer <accessToken>                         │
-│  ↓                                                           │
-│  If 401 → Try POST /api/auth/refresh → Retry request         │
-└─────────────────────────────────────────────────────────────┘
-         ↓
-┌─────────────────────────────────────────────────────────────┐
-│  PAGE LOAD / REFRESH                                         │
-│  POST /api/auth/refresh (cookie sent automatically)          │
-│  ↓                                                           │
-│  Response: { accessToken, user }                             │
-│  (Session restored!)                                         │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## AI Layer (llmClient.js)
-
-The AI layer is designed to be provider-agnostic. It includes a placeholder that can be replaced with any LLM provider.
-
-### Location
+The project includes an AI abstraction layer with **no vendor lock-in**:
 
 ```
 server/ai/llmClient.js
 ```
 
-### Usage
+### Features
+- No hardcoded AI provider
+- Mock mode via `USE_MOCK_AI=true`
+- Easy to swap: OpenAI, Claude, Gemini, etc.
 
+### AI Use Cases (planned)
+- Question generation
+- Answer evaluation
+- Report generation
+
+For MVP, AI returns deterministic mock responses.
+
+---
+
+## Architecture Principles
+
+| Principle | Implementation |
+|-----------|----------------|
+| Backend owns logic | All business logic lives in the API |
+| Frontend is dumb | React only renders UI and calls endpoints |
+| Stateless backend | No server-side sessions (except DB) |
+| REST API | No GraphQL, no real-time features |
+| Minimal components | Avoid over-splitting React components |
+
+---
+
+## Database Models
+
+### Users
 ```javascript
-import { callLLM, isLLMConfigured, getLLMStatus } from './ai/llmClient.js';
-
-// Check if configured
-if (isLLMConfigured()) {
-  const response = await callLLM('Your prompt here');
+{
+  email: String,
+  passwordHash: String,
+  createdAt: Date
 }
 ```
 
-### Adding a Provider
-
-1. Install the provider SDK:
-
-```bash
-# OpenAI
-npm install openai
-
-# Anthropic Claude
-npm install @anthropic-ai/sdk
-
-# Google Gemini
-npm install @google/generative-ai
-```
-
-2. Set environment variables:
-
-```env
-LLM_PROVIDER=openai
-LLM_API_KEY=your-api-key
-```
-
-3. Implement the provider in `llmClient.js` (see file for examples)
-
-### Example Implementations
-
-**OpenAI:**
+### Interviews (planned)
 ```javascript
-import OpenAI from 'openai';
-const openai = new OpenAI({ apiKey: process.env.LLM_API_KEY });
-
-export async function callLLM(prompt) {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [{ role: 'user', content: prompt }],
-  });
-  return response.choices[0].message.content;
+{
+  userId: ObjectId,
+  status: 'in_progress' | 'completed',
+  questions: [{
+    id: String,
+    text: String,
+    type: 'technical' | 'behavioral',
+    weight: Number
+  }],
+  answers: [{
+    questionId: String,
+    transcript: String
+  }],
+  evaluation: Object,
+  report: Object,
+  createdAt: Date,
+  completedAt: Date
 }
 ```
 
-**Anthropic Claude:**
-```javascript
-import Anthropic from '@anthropic-ai/sdk';
-const anthropic = new Anthropic({ apiKey: process.env.LLM_API_KEY });
+---
 
-export async function callLLM(prompt) {
-  const message = await anthropic.messages.create({
-    model: 'claude-3-opus-20240229',
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
-  });
-  return message.content[0].text;
-}
-```
+## MVP Success Criteria
 
-## Security Notes
+- [x] User can register/login
+- [ ] User can start an interview
+- [ ] User can answer multiple questions
+- [ ] User can see a stored report
+- [ ] User can return to Home and revisit past reports
+- [ ] All data persists after page refresh
 
-- Access tokens are stored in memory (cleared on page refresh)
-- Refresh tokens use HttpOnly cookies (not accessible to JavaScript)
-- CORS is configured for specific frontend origin only
-- Passwords are hashed with bcrypt (12 rounds)
-- Helmet.js adds security headers
+---
 
-## Production Deployment
+## API Documentation
 
-1. Generate strong secrets for JWT:
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-   ```
+See [docs/api-contract.md](docs/api-contract.md) for full API specification.
 
-2. Update environment variables:
-   - Set `NODE_ENV=production`
-   - Use strong JWT secrets
-   - Configure CORS for production domain
+### Current Endpoints
 
-3. Build the client:
-   ```bash
-   cd client
-   npm run build
-   ```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/logout` | Logout |
+| POST | `/api/auth/refresh` | Refresh token |
+| GET | `/api/auth/me` | Get current user |
+| GET | `/api/health` | Health check |
 
-## License
+### Planned Endpoints
 
-MIT
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/interviews` | Start new interview |
+| GET | `/api/interviews` | List user's interviews |
+| GET | `/api/interviews/:id` | Get interview details |
+| POST | `/api/interviews/:id/answer` | Submit answer |
+| POST | `/api/interviews/:id/complete` | Complete interview |
+| GET | `/api/interviews/:id/report` | Get report |
+
+---
+
+## Development Stage
+
+| Phase | Status |
+|-------|--------|
+| Auth scaffold | ✅ Complete |
+| Frontend pages (UI-only) | ✅ Complete |
+| API contract | ✅ Complete |
+| Interview endpoints | 🔄 Next |
+| Mock evaluation | 🔄 Next |
+| AI integration | ⏳ Later |
+| Company features | ⏳ Later |
 
