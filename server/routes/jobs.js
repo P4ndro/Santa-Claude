@@ -65,9 +65,29 @@ router.post('/', requireCompany, async (req, res, next) => {
       location: location || 'Remote',
       employmentType: employmentType || 'Full-time',
       status: 'active',
+      // Initialize question config with defaults (can be customized)
+      questionConfig: {
+        numQuestions: 5,
+        technicalRatio: 0.6, // 60% technical, 40% behavioral
+        difficulty: 'mixed',
+      },
     });
 
     await job.save();
+
+    // TODO: AI Integration - Generate questions from job description
+    // import { generateQuestions } from '../ai/questionGenerator.js';
+    // try {
+    //   const questions = await generateQuestions(job, job.questionConfig);
+    //   job.generatedQuestions = questions;
+    //   job.aiGeneration.questionsGenerated = true;
+    //   job.aiGeneration.generatedAt = new Date();
+    //   job.aiGeneration.model = process.env.LLM_PROVIDER;
+    //   await job.save();
+    // } catch (error) {
+    //   console.error('Failed to generate questions:', error);
+    //   // Continue without questions - can be generated later
+    // }
 
     res.status(201).json({
       job: {
