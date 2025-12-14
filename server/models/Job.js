@@ -41,7 +41,7 @@ const jobSchema = new mongoose.Schema({
     text: String,
     type: {
       type: String,
-      enum: ['technical', 'behavioral'],
+      enum: ['technical', 'behavioral', 'coding'],
     },
     category: String, // e.g., 'algorithms', 'system-design', 'communication'
     difficulty: {

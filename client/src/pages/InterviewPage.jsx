@@ -34,6 +34,8 @@ export default function InterviewPage() {
   // Timer state: 2 minutes = 120 seconds
   const [timeRemaining, setTimeRemaining] = useState(120);
   const timerIntervalRef = useRef(null);
+  const answerRef = useRef('');
+  const answersRef = useRef({});
 
   // Fetch interview data on mount
   useEffect(() => {
@@ -115,6 +117,15 @@ export default function InterviewPage() {
     }
   }, [questionIndex, questions, answers]);
 
+  // Keep refs in sync with state (for timer access without dependencies)
+  useEffect(() => {
+    answerRef.current = answer;
+  }, [answer]);
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
   // Timer effect: countdown and auto-submit
   useEffect(() => {
     // Reset timer when question changes
@@ -147,8 +158,8 @@ export default function InterviewPage() {
               setSubmitting(true);
               setError('');
               
-              // Get current answer value
-              const currentAnswer = answers[q.id] || answer || '';
+              // Get current answer value from refs (always up-to-date, no dependency needed)
+              const currentAnswer = answersRef.current[q.id] || answerRef.current || '';
               
               const result = await api.submitAnswer(
                 interviewId,
@@ -200,7 +211,7 @@ export default function InterviewPage() {
         clearInterval(timerIntervalRef.current);
       }
     };
-  }, [questionIndex, questions, submitting, interviewId, answer, answers, navigate]);
+  }, [questionIndex, questions, submitting, interviewId, navigate]);
 
   const currentQuestion = questions[questionIndex];
   
