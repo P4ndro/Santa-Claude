@@ -425,25 +425,7 @@ cd server && npm start
 - `FRONTEND_BACKEND_INTEGRATION_REPORT.md` - Integration notes
 
 ---
-
-## 🤝 Contributing
-
-This is currently a personal project. Contributions welcome in the future!
-
----
-
-## 📄 License
-
-Private project - All rights reserved
-
----
-
-## 🙏 Acknowledgments
-
-- Groq for fast, free AI inference
-- Web Speech API for browser-native TTS/STT
-- React, Vite, Tailwind CSS for modern frontend development
-
----
-
-**Built with ❤️ for better interview preparation**
+Backend Developer - Sandro Iobidze
+AI logic Developer - Davit Jincharadze
+Frontend Developer - Juliet Chapidze
+Frontend Developer - Saba Ananidze
