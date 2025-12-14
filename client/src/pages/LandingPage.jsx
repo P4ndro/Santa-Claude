@@ -62,23 +62,12 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="animate-fade-in-delay">
-              <div className="bg-gray-100 rounded-lg aspect-video flex items-center justify-center shadow-lg">
-                <div className="text-center p-8">
-                  <svg
-                    className="w-24 h-24 mx-auto text-gray-400 mb-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <p className="text-gray-500">Hero Image Placeholder</p>
-                </div>
+              <div className="rounded-lg aspect-video overflow-hidden shadow-lg">
+                <img
+                  src="/interview.png"
+                  alt="Interview practice platform"
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
           </div>
@@ -242,7 +231,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8">
             <TestimonialCard
               image={null}
-              quote="InterviewAI helped me land my dream job at Google. The realistic practice sessions were invaluable."
+              quote="Intervia helped me land my dream job at Google. The realistic practice sessions were invaluable."
               name="Sarah Johnson"
               role="Software Engineer"
               company="Google"
@@ -296,7 +285,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-8 px-6">
         <div className="max-w-7xl mx-auto text-center">
-          <p className="text-gray-400">© 2023 InterviewAI. All rights reserved.</p>
+          <p className="text-gray-400">© 2023 Intervia. All rights reserved.</p>
         </div>
       </footer>
     </div>

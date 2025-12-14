@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import Editor from '@monaco-editor/react';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 
@@ -24,18 +23,23 @@ export default function InterviewPage() {
   // Free TTS Interviewer (browser-based, no API costs)
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speechSynthesisRef = useRef(null);
+  const interviewerVideoRef = useRef(null);
   
-  // STT (Speech-to-Text) - DISABLED for now (only TTS enabled)
-  const isRecording = false;
-  const recognitionSupported = false;
-  const interimTranscript = '';
+  // STT (Speech-to-Text) - Web Speech API
+  const [isRecording, setIsRecording] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState('');
   const recognitionRef = useRef(null);
+  const isRecordingRef = useRef(false);
   
   // Timer state: 2 minutes = 120 seconds
   const [timeRemaining, setTimeRemaining] = useState(120);
   const timerIntervalRef = useRef(null);
   const answerRef = useRef('');
   const answersRef = useRef({});
+  
+  // Check if Speech Recognition is supported
+  const recognitionSupported = typeof window !== 'undefined' && 
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
 
   // Fetch interview data on mount
   useEffect(() => {
@@ -101,11 +105,11 @@ export default function InterviewPage() {
     if (questions[questionIndex]) {
       const questionId = questions[questionIndex].id;
       setAnswer(answers[questionId] || '');
-      // Stop recording when question changes - DISABLED (STT is disabled)
+      // Optional: Stop recording when question changes (commented out to allow continuous recording)
       // if (isRecording) {
       //   setIsRecording(false);
       // }
-      // Auto-start recording - DISABLED (STT is disabled)
+      // Optional: Auto-start recording for new questions (commented out to let user control when to record)
       // if (recognitionSupported && !answers[questionId]) {
       //   const timer = setTimeout(() => {
       //     if (!isRecording) {
@@ -241,10 +245,98 @@ export default function InterviewPage() {
   
   const codeLanguage = isCodeQuestion ? detectLanguage() : 'javascript';
 
+  // Helper function to safely switch video
+  const switchVideo = (videoSrc) => {
+    if (!interviewerVideoRef.current) return;
+    
+    const video = interviewerVideoRef.current;
+    
+    // Get current video source (handle both full URL and relative path)
+    const currentSrc = video.src || video.currentSrc || '';
+    const isSameVideo = currentSrc.includes(videoSrc) || currentSrc.endsWith(videoSrc);
+    
+    // If already playing the same video, don't switch
+    if (isSameVideo && !video.paused) return;
+    
+    // Wait for current video operations to complete
+    const handleVideoSwitch = () => {
+      // Cancel any pending play promises
+      if (video.pause) {
+        video.pause();
+      }
+      
+      video.src = videoSrc;
+      video.load(); // Load the new video
+      
+      // Wait for video to be ready before playing
+      const playVideo = () => {
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              // Video started playing successfully
+            })
+            .catch(err => {
+              // Ignore abort errors (happens when switching videos quickly)
+              if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
+                console.warn('Video play error:', err.name, err.message);
+              }
+            });
+        }
+      };
+      
+      if (video.readyState >= 2) {
+        // Video is already loaded
+        playVideo();
+      } else {
+        // Wait for video to load
+        const onLoadedData = () => {
+          playVideo();
+        };
+        video.addEventListener('loadeddata', onLoadedData, { once: true });
+        
+        // Fallback timeout in case loadeddata doesn't fire
+        setTimeout(() => {
+          video.removeEventListener('loadeddata', onLoadedData);
+          if (video.readyState >= 2) {
+            playVideo();
+          }
+        }, 1000);
+      }
+    };
+    
+    // If video is currently playing, pause and wait a bit
+    if (!video.paused) {
+      video.pause();
+      // Small delay to let pause complete
+      setTimeout(handleVideoSwitch, 100);
+    } else {
+      handleVideoSwitch();
+    }
+  };
+
   // Free TTS: Speak question when it changes (browser Web Speech API - 100% free)
   useEffect(() => {
+    // Initialize video to idle state (aii2.mp4) when question loads
+    if (interviewerVideoRef.current && currentQuestion && !loading) {
+      // Set loop property
+      interviewerVideoRef.current.loop = true;
+      // Initialize with idle video
+      switchVideo('/aii2.mp4');
+    }
+
     if (currentQuestion?.text && !loading) {
-      speakQuestion(currentQuestion.text);
+      // Small delay to let video initialize before speaking
+      const timer = setTimeout(() => {
+        speakQuestion(currentQuestion.text);
+      }, 300);
+      
+      return () => {
+        clearTimeout(timer);
+        if (speechSynthesisRef.current) {
+          window.speechSynthesis.cancel();
+        }
+      };
     }
 
     // Cleanup: stop speaking when component unmounts or question changes
@@ -266,18 +358,15 @@ export default function InterviewPage() {
     }
   }, []);
 
-  // STT (Speech-to-Text) - DISABLED for now (only TTS enabled)
-  // Initialize Speech Recognition (STT) - COMMENTED OUT
+  // Cleanup TTS on unmount
   useEffect(() => {
-    // STT disabled - only TTS (text-to-speech) is enabled
-    // Browser will speak questions to you, but you need to type answers manually
     return () => {
       // Cleanup - stop TTS on unmount
       window.speechSynthesis.cancel();
     };
   }, []); // Only run once on mount
   
-  /* COMMENTED OUT - STT INITIALIZATION
+  /* OLD STT INITIALIZATION CODE (Replaced by startRecording/stopRecording functions below)
   useEffect(() => {
     // Check browser support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -481,14 +570,19 @@ export default function InterviewPage() {
     // Create speech utterance
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Configure voice (use system default or find a good one)
+    // Configure voice (prefer male voice)
     const voices = window.speechSynthesis.getVoices();
     const preferredVoice = voices.find(voice => 
-      voice.name.includes('Female') || 
-      voice.name.includes('Zira') || 
-      voice.name.includes('Samantha') ||
-      voice.name.includes('Karen')
-    ) || voices[0];
+      voice.name.includes('Male') || 
+      voice.name.includes('David') || 
+      voice.name.includes('Mark') ||
+      voice.name.includes('Alex') ||
+      voice.name.includes('Daniel') ||
+      voice.name.includes('Tom') ||
+      voice.name.includes('Microsoft David') ||
+      voice.name.includes('Microsoft Mark') ||
+      (voice.lang.startsWith('en') && voice.gender === 'male')
+    ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0];
     
     if (preferredVoice) {
       utterance.voice = preferredVoice;
@@ -500,15 +594,24 @@ export default function InterviewPage() {
     // Handle events
     utterance.onstart = () => {
       setIsSpeaking(true);
+      // Switch to speaking video (aii1.mp4)
+      switchVideo('/aii1.mp4');
     };
 
     utterance.onend = () => {
       setIsSpeaking(false);
+      // Switch to idle video (aii2.mp4)
+      switchVideo('/aii2.mp4');
     };
 
     utterance.onerror = (error) => {
-      console.error('Speech synthesis error:', error);
+      // Only log non-abort errors
+      if (error.error !== 'interrupted' && error.error !== 'canceled') {
+        console.warn('Speech synthesis error:', error.error);
+      }
       setIsSpeaking(false);
+      // Switch to idle video on error
+      switchVideo('/aii2.mp4');
     };
 
     // Start speaking
@@ -519,16 +622,125 @@ export default function InterviewPage() {
   const stopSpeaking = () => {
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
+    // Switch to idle video when stopped
+    switchVideo('/aii2.mp4');
   };
 
-  // STT Functions - DISABLED (only TTS enabled)
+  // STT Functions - Web Speech API
   const startRecording = () => {
-    // STT disabled - please type your answer manually
+    if (!recognitionSupported) {
+      setError('Speech recognition is not supported in your browser. Please use Chrome or Edge.');
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setError('You are offline. Speech recognition requires an internet connection.');
+      return;
+    }
+
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        isRecordingRef.current = true;
+        setInterimTranscript('');
+      };
+
+      recognition.onresult = (event) => {
+        let interim = '';
+        let final = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            final += transcript + ' ';
+          } else {
+            interim += transcript;
+          }
+        }
+
+        setInterimTranscript(interim);
+
+        if (final) {
+          setAnswer(prev => {
+            const newAnswer = prev + (prev && !prev.endsWith(' ') ? ' ' : '') + final.trim();
+            return newAnswer;
+          });
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+          return;
+        }
+        
+        if (event.error === 'network') {
+          setError('Network error: Speech recognition requires internet. Check your connection or type manually.');
+          stopRecording();
+          return;
+        }
+        
+        if (event.error === 'not-allowed') {
+          setError('Microphone permission denied. Please allow microphone access.');
+          stopRecording();
+          return;
+        }
+        
+        setError(`Speech recognition error: ${event.error}. Please type your answer manually.`);
+        stopRecording();
+      };
+
+      recognition.onend = () => {
+        if (isRecordingRef.current && recognitionRef.current === recognition) {
+          try {
+            recognition.start();
+          } catch (err) {
+            setIsRecording(false);
+            isRecordingRef.current = false;
+            setInterimTranscript('');
+          }
+        } else {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+          setInterimTranscript('');
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error('Failed to start speech recognition:', err);
+      setError('Failed to start speech recognition. Please try again.');
+      setIsRecording(false);
+    }
   };
   
   const stopRecording = () => {
-    // STT disabled
+    isRecordingRef.current = false;
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsRecording(false);
+    setInterimTranscript('');
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
 
   const handleSubmitAnswer = async (skipped = false) => {
     if (!currentQuestion) return;
@@ -665,254 +877,275 @@ export default function InterviewPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-6 py-8">
-          <div className="bg-black rounded-lg shadow-xl p-8 border border-white text-center">
-            <p className="text-white">Loading interview...</p>
-          </div>
-        </main>
+      <div className="h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-lg font-medium">Connecting to interview...</p>
+        </div>
       </div>
     );
   }
 
   if (error && questions.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-900">
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-6 py-8">
-          <div className="bg-slate-800 rounded-lg shadow-xl p-8 border border-slate-700 text-center">
-            <p className="text-red-400 mb-4">{error}</p>
-            <button
-              onClick={() => navigate('/home')}
-              className="px-6 py-2 bg-white hover:bg-gray-200 text-black font-medium rounded-lg transition-colors"
-            >
-              Back to Home
-            </button>
+      <div className="h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </div>
-        </main>
+          <p className="text-red-400 mb-6 text-lg">{error}</p>
+          <button
+            onClick={() => navigate('/home')}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-lg"
+          >
+            Back to Home
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navbar />
-      <main className="max-w-7xl mx-auto px-6 py-8">
-          <div className="grid lg:grid-cols-2 gap-6">
-          {/* AI Interviewer Panel (Free TTS) */}
-          <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">Your Interviewer</h2>
-              {isSpeaking && (
-                <span className="text-xs px-2 py-1 bg-emerald-900/50 text-emerald-400 rounded">
-                  🔊 Speaking
-                </span>
-              )}
+    <div className="h-screen bg-gray-900 flex flex-col overflow-hidden">
+      {/* Minimal Header - Hidden until hover */}
+      <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/80 to-transparent px-6 py-3 opacity-0 hover:opacity-100 transition-opacity duration-300">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+              <span className="text-xs text-white font-medium">LIVE</span>
             </div>
-            
-            {/* Interviewer Avatar */}
-            <div className={`relative bg-gradient-to-br from-emerald-900 to-blue-900 rounded-lg overflow-hidden aspect-video border-2 transition-all ${
-              isSpeaking ? 'border-emerald-500 ring-2 ring-emerald-500' : 'border-slate-700'
-            }`}>
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-center">
-                  <div className={`w-24 h-24 mx-auto mb-4 rounded-full bg-white/20 flex items-center justify-center transition-transform ${
-                    isSpeaking ? 'scale-110' : 'scale-100'
-                  }`}>
-                    <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"/>
-                    </svg>
-                  </div>
-                  <p className="text-white text-sm font-medium">AI Interviewer</p>
-                </div>
-              </div>
-              
-              {/* Speaking animation */}
-              {isSpeaking && (
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-8 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-6 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-8 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></div>
-                    <div className="w-2 h-6 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '450ms' }}></div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <span className="text-xs px-2 py-1 rounded bg-white/20 text-white backdrop-blur-sm">
+              Question {questionIndex + 1}/{questions.length}
+            </span>
+            <span className="text-xs px-2 py-1 rounded bg-white/20 text-white backdrop-blur-sm">
+              {currentQuestion?.type || 'behavioral'}
+            </span>
+          </div>
+          <button
+            onClick={handleEndInterview}
+            disabled={submitting}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md transition-colors disabled:opacity-50 text-sm"
+          >
+            {submitting ? 'Ending...' : 'End Call'}
+          </button>
+        </div>
+      </div>
 
-            {/* Controls */}
-            <div className="mt-4 flex gap-2">
+      {/* Main Content - Two Camera Layout */}
+      <div className="flex-1 grid grid-cols-2 gap-0 overflow-hidden relative">
+        {/* AI Interviewer Video - Left Side */}
+        <div className="bg-black relative overflow-hidden group">
+          {/* Video */}
+          <video
+            ref={interviewerVideoRef}
+            className="w-full h-full object-cover"
+            loop
+            muted
+            playsInline
+            preload="auto"
+            onError={(e) => {
+              console.warn('Video load error:', e);
+            }}
+          >
+            <source src="/aii2.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+          
+          {/* Overlay info - bottom left */}
+          <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-lg">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-xs text-white font-medium">AI Interviewer</span>
+            </div>
+            {isSpeaking && (
+              <div className="px-3 py-1.5 bg-red-500/80 backdrop-blur-md rounded-lg animate-pulse">
+                <span className="text-xs text-white font-medium flex items-center gap-1">
+                  <span>🔊</span> Speaking
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Controls overlay - hidden until hover */}
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="flex gap-2">
               <button
                 onClick={() => speakQuestion(currentQuestion?.text || '')}
                 disabled={isSpeaking}
-                className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium transition"
+                className="px-4 py-2 bg-white/90 hover:bg-white disabled:bg-white/50 disabled:cursor-not-allowed text-black text-sm font-medium rounded-lg transition backdrop-blur-sm shadow-lg"
               >
-                {isSpeaking ? '🔊 Speaking...' : '🔊 Replay Question'}
+                {isSpeaking ? '🔊 Speaking...' : '🔊 Replay'}
               </button>
               {isSpeaking && (
                 <button
                   onClick={stopSpeaking}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md text-white text-sm font-medium transition"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition shadow-lg"
                 >
                   ⏹ Stop
                 </button>
               )}
             </div>
           </div>
+        </div>
 
-          {/* Webcam Video Panel */}
-          <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">Video Feed</h2>
-              <button
-                onClick={toggleVideo}
-                className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-md transition-colors"
-              >
-                {videoEnabled ? 'Disable Video' : 'Enable Video'}
-              </button>
-            </div>
-            <div className="bg-slate-900 rounded-lg overflow-hidden aspect-video border border-slate-700">
-              {videoEnabled ? (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-500">
-                  Video Disabled
+        {/* Candidate Webcam - Right Side */}
+        <div className="bg-black relative overflow-hidden group">
+          {videoEnabled ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+              <div className="text-center">
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-700 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/>
+                  </svg>
                 </div>
-              )}
+                <p className="text-gray-400 text-sm">Camera Off</p>
+              </div>
             </div>
-            <div className="mt-4 p-3 bg-slate-900 rounded-md border border-slate-700">
-              <p className="text-sm text-slate-400">
-                🔊 Audio: <span className="text-emerald-400">Active</span>
-              </p>
+          )}
+          
+          {/* Overlay info - bottom left */}
+          <div className="absolute bottom-4 left-4 z-10">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-lg">
+              <div className={`w-2 h-2 rounded-full ${videoEnabled ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-xs text-white font-medium">You</span>
             </div>
           </div>
 
-          {/* Question & Answer Panel */}
-          <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-semibold text-white">
-                  Question {questionIndex + 1}/{questions.length}
-                </h2>
-                <div className="flex items-center gap-3">
-                  {/* Timer Display */}
-                  <div className={`px-3 py-1 rounded-md font-mono font-semibold text-sm ${
-                    timeRemaining <= 30 
-                      ? 'bg-red-900/50 text-red-400 border border-red-700' 
-                      : timeRemaining <= 60 
-                      ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-700'
-                      : 'bg-slate-700 text-emerald-400 border border-slate-600'
-                  }`}>
-                    {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    currentQuestion?.type === 'technical' || 
-                    currentQuestion?.type === 'coding' || 
-                    currentQuestion?.type === 'theoretical'
-                      ? 'bg-blue-900/50 text-blue-400' 
-                      : 'bg-emerald-900/50 text-emerald-400'
-                  }`}>
-                    {currentQuestion?.type || 'behavioral'}
-                  </span>
+          {/* Controls overlay - hidden until hover */}
+          <div className="absolute bottom-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <button
+              onClick={toggleVideo}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition shadow-lg backdrop-blur-sm ${
+                videoEnabled 
+                  ? 'bg-white/90 hover:bg-white text-black' 
+                  : 'bg-red-600/90 hover:bg-red-700 text-white'
+              }`}
+            >
+              {videoEnabled ? '📹 Camera On' : '📹 Camera Off'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Question & Answer Section - Bottom Panel (Slides up on hover) */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/95 via-black/90 to-transparent p-6 transform translate-y-[calc(100%-80px)] hover:translate-y-0 transition-transform duration-300 ease-in-out">
+        <div className="max-w-6xl mx-auto">
+          {/* Question Card */}
+          <div className="mb-4">
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20 shadow-2xl">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-lg">💬</span>
                 </div>
-              </div>
-              <div className="bg-slate-900 rounded-md p-4 border border-slate-700 mb-4">
-                <p className="text-white text-lg">{currentQuestion?.text}</p>
+                <div className="flex-1">
+                  <p className="text-white text-lg leading-relaxed font-medium">{currentQuestion?.text}</p>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div className="mb-4">
-              <label className="block text-sm text-slate-400 mb-2">Your Answer</label>
-              {isCodeQuestion ? (
-                <div className="border border-slate-600 rounded-md overflow-hidden">
-                  <Editor
-                    height="400px"
-                    language={codeLanguage}
-                    value={answer}
-                    onChange={(value) => setAnswer(value || '')}
-                    theme="vs-dark"
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      lineNumbers: 'on',
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      tabSize: 2,
-                      readOnly: submitting,
-                      wordWrap: 'on',
-                    }}
-                  />
-                </div>
-              ) : (
-                <textarea
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  rows={8}
+          {/* Answer Section */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-white/90">Your Answer</label>
+              {recognitionSupported && (
+                <button
+                  onClick={isRecording ? stopRecording : startRecording}
                   disabled={submitting}
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-md text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none disabled:opacity-50"
-                  placeholder="Type your answer here..."
-                />
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-lg ${
+                    isRecording
+                      ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
+                      : 'bg-white/10 hover:bg-white/20 text-white backdrop-blur-sm border border-white/20'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={isRecording ? 'Stop recording' : 'Start voice input'}
+                >
+                  {isRecording ? '🎤 Stop Recording' : '🎤 Voice Input'}
+                </button>
               )}
             </div>
-
-            {error && (
-              <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-md">
-                <p className="text-red-400 text-sm">{error}</p>
+            <textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              rows={3}
+              disabled={submitting}
+              className="w-full px-4 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-white/40 focus:ring-2 focus:ring-white/20 resize-none disabled:opacity-50 shadow-lg"
+              placeholder={isRecording ? "Speak your answer... (or type)" : "Type your answer here or use voice input..."}
+            />
+            {isRecording && (
+              <div className="mt-2 p-3 bg-red-500/20 backdrop-blur-md border border-red-500/30 rounded-lg">
+                <p className="text-sm text-white flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                  Listening... {interimTranscript && <span className="text-white/70 italic">({interimTranscript})</span>}
+                </p>
               </div>
             )}
+          </div>
 
-              <div className="flex gap-3">
-                <button
-                onClick={() => handleSubmitAnswer(false)}
-                disabled={!answer.trim() || submitting}
-                className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
-              >
-                {submitting ? 'Submitting...' : 'Submit Answer'}
-                </button>
-                <button
-                  onClick={handleSkipQuestion}
-                disabled={submitting}
-                className="px-4 py-2 border border-slate-600 hover:border-slate-500 text-slate-300 hover:text-white font-medium rounded-md transition-colors disabled:opacity-50"
-              >
-                Skip
-              </button>
-            </div>
-
-            {/* Navigation buttons */}
-            <div className="flex gap-3 mt-3">
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleSubmitAnswer(false)}
+              disabled={!answer.trim() || submitting}
+              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none"
+            >
+              {submitting ? 'Submitting...' : 'Submit Answer'}
+            </button>
+            <button
+              onClick={handleSkipQuestion}
+              disabled={submitting}
+              className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all backdrop-blur-sm border border-white/20 disabled:opacity-50 shadow-lg"
+            >
+              Skip
+            </button>
+            {questionIndex > 0 && (
               <button
                 onClick={handlePrevQuestion}
-                disabled={questionIndex === 0 || submitting}
-                className="flex-1 px-4 py-2 border border-white hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-white hover:text-gray-300 font-medium rounded-md transition-colors"
+                disabled={submitting}
+                className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all backdrop-blur-sm border border-white/20 disabled:opacity-50"
               >
-                ← Previous
+                ←
               </button>
-                <button
-                  onClick={handleNextQuestion}
-                disabled={questionIndex >= questions.length - 1 || submitting}
-                className="flex-1 px-4 py-2 border border-slate-600 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 hover:text-white font-medium rounded-md transition-colors"
+            )}
+            {questionIndex < questions.length - 1 && (
+              <button
+                onClick={handleNextQuestion}
+                disabled={submitting}
+                className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all backdrop-blur-sm border border-white/20 disabled:opacity-50"
               >
-                Next →
-                </button>
-              </div>
+                →
+              </button>
+            )}
+          </div>
 
+          {/* End Interview Button */}
+          <div className="mt-4 pt-4 border-t border-white/20">
             <button
               onClick={handleEndInterview}
               disabled={submitting}
-              className="w-full mt-4 px-4 py-2 border border-red-600 hover:border-red-500 text-red-400 hover:text-red-300 font-medium rounded-md transition-colors disabled:opacity-50"
+              className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none"
             >
-              {submitting ? 'Finishing...' : 'End Interview'}
+              {submitting ? 'Ending Interview...' : 'End Interview'}
             </button>
           </div>
-          </div>
-      </main>
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-500/20 backdrop-blur-md border border-red-500/30 rounded-lg">
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
